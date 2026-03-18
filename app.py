@@ -8,7 +8,7 @@ import datetime
 # Config
 # -----------------------------
 APP_NAME = "AI Image Studio"
-APP_TAGLINE = "Create AI images instantly"
+APP_TAGLINE = "Create stunning AI images instantly for social media, ads, and creative projects."
 FREE_DAILY_LIMIT = 1
 PREMIUM_LINK = "https://aiimagestudio.gumroad.com/l/yrpblj"
 PREMIUM_CODE = "AISTUDIO2026"
@@ -18,7 +18,7 @@ HF_TOKEN = st.secrets.get("HF_TOKEN", "")
 # -----------------------------
 # Page setup
 # -----------------------------
-st.set_page_config(page_title=APP_NAME, page_icon="🎨", layout="centered")
+st.set_page_config(page_title=APP_NAME, page_icon="🎨", layout="wide")
 
 # -----------------------------
 # Daily usage tracking
@@ -42,11 +42,195 @@ if st.session_state.usage_date != today:
     st.session_state.usage_count = 0
 
 # -----------------------------
+# Styling
+# -----------------------------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+.stApp {
+    background: linear-gradient(180deg, #0b1020 0%, #111827 100%);
+    color: white;
+}
+
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    max-width: 1200px;
+}
+
+.hero {
+    background: linear-gradient(135deg, rgba(79,70,229,0.35), rgba(168,85,247,0.25));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 24px;
+    padding: 2.2rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.28);
+}
+
+.hero-title {
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 0.5rem;
+    color: white;
+}
+
+.hero-sub {
+    font-size: 1.05rem;
+    color: #d1d5db;
+    max-width: 700px;
+    margin-bottom: 1rem;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.45rem 0.8rem;
+    margin-right: 0.5rem;
+    margin-top: 0.4rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    color: #e5e7eb;
+    font-size: 0.85rem;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.card {
+    background: rgba(17,24,39,0.85);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 20px;
+    padding: 1.2rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+}
+
+.card-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+    color: white;
+}
+
+.card-sub {
+    color: #9ca3af;
+    margin-bottom: 0.8rem;
+}
+
+.feature-box {
+    background: rgba(31,41,55,0.8);
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 1rem;
+    height: 100%;
+}
+
+.feature-head {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+    color: #f3f4f6;
+}
+
+.feature-text {
+    color: #cbd5e1;
+    font-size: 0.93rem;
+}
+
+.price-box {
+    background: rgba(31,41,55,0.85);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 18px;
+    padding: 1rem;
+    height: 100%;
+}
+
+.price-box.premium {
+    border: 1px solid rgba(168,85,247,0.5);
+    box-shadow: 0 10px 25px rgba(168,85,247,0.12);
+}
+
+.price-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+}
+
+.price-value {
+    font-size: 2rem;
+    font-weight: 800;
+    margin: 0.4rem 0;
+    color: white;
+}
+
+.small-muted {
+    color: #94a3b8;
+    font-size: 0.9rem;
+}
+
+.status-free {
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: rgba(127,29,29,0.4);
+    border: 1px solid rgba(248,113,113,0.25);
+    color: #fecaca;
+    margin-bottom: 1rem;
+}
+
+.status-premium {
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: rgba(20,83,45,0.35);
+    border: 1px solid rgba(74,222,128,0.25);
+    color: #bbf7d0;
+    margin-bottom: 1rem;
+}
+
+.footer {
+    text-align: center;
+    color: #9ca3af;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+
+.stTextArea textarea, .stTextInput input {
+    background-color: #0f172a !important;
+    color: white !important;
+    border-radius: 14px !important;
+    border: 1px solid #374151 !important;
+}
+
+.stSelectbox > div > div {
+    background-color: #0f172a !important;
+    color: white !important;
+    border-radius: 14px !important;
+    border: 1px solid #374151 !important;
+}
+
+div.stButton > button, a[data-testid="stLinkButton"] {
+    width: 100%;
+    border-radius: 14px !important;
+    font-weight: 700 !important;
+}
+
+div.stButton > button {
+    border: none;
+    background: linear-gradient(135deg, #4f46e5, #9333ea);
+    color: white;
+    padding: 0.8rem 1rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------
 # Sidebar
 # -----------------------------
 with st.sidebar:
-    st.header("Premium")
-    st.link_button("💎 Buy Premium", PREMIUM_LINK)
+    st.markdown("## 💎 Premium")
+    st.link_button("Buy Premium", PREMIUM_LINK)
 
     premium_code_input = st.text_input("Enter Premium Code", type="password")
 
@@ -59,99 +243,53 @@ with st.sidebar:
 
     st.markdown("---")
     if st.session_state.premium_unlocked:
-        st.success("Premium: Unlimited access")
+        st.success("Unlimited access active")
     else:
         remaining = max(FREE_DAILY_LIMIT - st.session_state.usage_count, 0)
         st.info(f"Free images left today: {remaining}")
 
-# -----------------------------
-# Main UI
-# -----------------------------
-st.title("🎨 AI Image Studio")
-st.write(APP_TAGLINE)
-
-st.subheader("What you can create")
-st.write("- Instagram posts")
-st.write("- YouTube thumbnails")
-st.write("- Product ads")
-st.write("- Wallpapers and AI art")
-
-st.markdown("---")
-
-prompt = st.text_area(
-    "Enter your prompt",
-    placeholder="Example: A luxury perfume bottle on a marble table, premium ad photography, soft shadows, realistic, ultra detailed"
-)
-
-# -----------------------------
-# Generate image
-# -----------------------------
-if st.button("Generate Image"):
-    if not HF_TOKEN:
-        st.error("HF_TOKEN is missing in Streamlit Secrets.")
-    elif not prompt.strip():
-        st.error("Please enter a prompt.")
-    elif (not st.session_state.premium_unlocked) and st.session_state.usage_count >= FREE_DAILY_LIMIT:
-        st.error("Free limit reached.")
-        st.link_button("💎 Upgrade to Premium", PREMIUM_LINK)
+    st.markdown("---")
+    st.markdown("### Recent Prompts")
+    if st.session_state.history:
+        for item in st.session_state.history[:5]:
+            st.caption(item)
     else:
-        api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-
-        with st.spinner("Generating image..."):
-            try:
-                response = requests.post(
-                    api_url,
-                    headers=headers,
-                    json={"inputs": prompt},
-                    timeout=120
-                )
-
-                if response.status_code == 200:
-                    image = Image.open(io.BytesIO(response.content))
-                    st.image(image, caption="Generated Image", use_container_width=True)
-
-                    download_buffer = io.BytesIO()
-                    image.save(download_buffer, format="PNG")
-
-                    st.download_button(
-                        label="Download Image",
-                        data=download_buffer.getvalue(),
-                        file_name="ai-image-studio.png",
-                        mime="image/png"
-                    )
-
-                    if not st.session_state.premium_unlocked:
-                        st.session_state.usage_count += 1
-
-                    st.session_state.history.insert(0, prompt)
-
-                elif response.status_code == 503:
-                    st.warning("Model is loading. Wait a little and try again.")
-                elif response.status_code == 401:
-                    st.error("Invalid HF token.")
-                else:
-                    st.error(f"Generation failed. Status code: {response.status_code}")
-
-            except requests.exceptions.Timeout:
-                st.error("Request timed out. Please try again.")
-            except Exception as e:
-                st.error(f"Unexpected error: {e}")
+        st.caption("No prompts yet")
 
 # -----------------------------
-# History
+# Hero section
 # -----------------------------
-st.markdown("---")
-st.subheader("Recent Prompts")
+st.markdown(f"""
+<div class="hero">
+    <div class="hero-title">{APP_NAME}</div>
+    <div class="hero-sub">{APP_TAGLINE}</div>
+    <span class="badge">🎨 AI Art Generator</span>
+    <span class="badge">⚡ Fast Results</span>
+    <span class="badge">📱 Social Media Ready</span>
+    <span class="badge">⬇️ Instant Download</span>
+</div>
+""", unsafe_allow_html=True)
 
-if st.session_state.history:
-    for item in st.session_state.history[:5]:
-        st.write(f"- {item}")
-else:
-    st.write("No prompts yet.")
+# -----------------------------
+# Features
+# -----------------------------
+st.markdown("""
+<div class="card">
+    <div class="card-title">Powerful features</div>
+    <div class="card-sub">Everything users need in a modern AI image generation website.</div>
+</div>
+""", unsafe_allow_html=True)
 
-# -----------------------------
-# Footer
-# -----------------------------
-st.markdown("---")
-st.write("© 2026 AI Image Studio")
+f1, f2, f3 = st.columns(3)
+with f1:
+    st.markdown("""
+    <div class="feature-box">
+        <div class="feature-head">Smart text-to-image</div>
+        <div class="feature-text">Turn simple words into posters, product ads, portraits, thumbnails, and creative visuals.</div>
+    </div>
+    """, unsafe_allow_html=True)
+with f2:
+    st.markdown("""
+    <div class="feature-box">
+        <div class="feature-head">Fast workflow</div>
+        <div class="feature-text">
