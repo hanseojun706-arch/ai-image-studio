@@ -15,7 +15,7 @@ st.set_page_config(
 APP_NAME = "AI IMAGE STUDIO"
 APP_TAGLINE = "Create stunning AI-generated images in seconds"
 
- "Generate high - quality images for social media, ads, thumbnails, and creative projects - all in seconds using AI."
+"Generate high - quality images for social media, ads, thumbnails, and creative projects - all in seconds using AI."
 
 [ AI Art Generator ] [ Fast Results ] [ Social Media Ready ] [ Instant Download ]
 
