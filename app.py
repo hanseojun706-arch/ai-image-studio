@@ -4,30 +4,50 @@ from PIL import Image
 import io
 from datetime import datetime
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# ── PAGE CONFIG ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="PixelMuse AI",
     page_icon="🎨",
     layout="wide",
 )
 
-# ── App config ───────────────────────────────────────────────────────────────
-APP_NAME = "PixelMuse AI"
+# ── EDIT THESE VALUES ────────────────────────────────────────────────────────
+APP_NAME = "AI IMAGE STUDIO"
 APP_TAGLINE = "Create stunning AI-generated images in seconds"
-PREMIUM_LINK = "https://your-payment-link.com"   # replace later
-PREMIUM_ACCESS_CODE = "PREMIUM2026"              # replace later
+Create stunning AI images in seconds
 
-# ── Session state ────────────────────────────────────────────────────────────
+Generate high-quality images for social media, ads, thumbnails, and creative projects — all in seconds using AI.
+
+[ AI Art Generator ] [ Fast Results ] [ Social Media Ready ] [ Instant Download ]
+
+[ Start Creating ]   [ Upgrade to Premium ]
+PREMIUM_LINK = "https://your-payment-link.com"   # EDIT THIS
+FREE_DAILY_LIMIT = 3                              # EDIT THIS if you want
+SHOW_WATERMARK_NOTE = True                        # True or False
+
+# ── SESSION STATE ────────────────────────────────────────────────────────────
 if "history" not in st.session_state:
     st.session_state.history = []
 
-if "premium_user" not in st.session_state:
-    st.session_state.premium_user = False
+if "generation_count" not in st.session_state:
+    st.session_state.generation_count = 0
 
-# ── Secrets / token ──────────────────────────────────────────────────────────
+# ── SECRET TOKEN ─────────────────────────────────────────────────────────────
+# Add this in Streamlit Secrets:
+# HF_TOKEN = "your_huggingface_token_here"
 HF_TOKEN = st.secrets.get("HF_TOKEN", "")
 
-# ── Prompt presets ───────────────────────────────────────────────────────────
+# ── MODELS ───────────────────────────────────────────────────────────────────
+FREE_MODELS = {
+    "Stable Diffusion XL — Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
+}
+
+PREMIUM_MODELS = {
+    "Stable Diffusion XL — Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
+    "FLUX.1-schnell — Ultra fast": "black-forest-labs/FLUX.1-schnell",
+    "Dreamlike Photoreal — Realistic photos": "dreamlike-art/dreamlike-photoreal-2.0",
+}
+
 PROMPT_PRESETS = {
     "None": "",
     "Cinematic City": "A futuristic city street at night, neon reflections, rainy atmosphere, cinematic lighting, ultra detailed, 8k",
@@ -36,16 +56,9 @@ PROMPT_PRESETS = {
     "Fashion Portrait": "Elegant woman in royal blue dress, studio lighting, high fashion photography, detailed face, realistic skin texture",
     "Village Sunrise": "A dreamy mountain village at sunrise, soft golden light, cinematic atmosphere, ultra detailed, realistic, 8k",
     "Anime Scene": "A beautiful anime-style girl standing under cherry blossoms, soft lighting, vibrant colors, dreamy composition",
-    "Food Photography": "A premium dessert on a restaurant table, soft light, bokeh background, realistic food photography, detailed textures",
 }
 
-MODELS = {
-    "Stable Diffusion XL — Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
-    "FLUX.1-schnell — Ultra fast": "black-forest-labs/FLUX.1-schnell",
-    "Dreamlike Photoreal — Realistic photos": "dreamlike-art/dreamlike-photoreal-2.0",
-}
-
-# ── CSS ──────────────────────────────────────────────────────────────────────
+# ── CUSTOM CSS ───────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
@@ -207,11 +220,6 @@ h1, h2, h3, h4 {
     font-size: 0.95rem;
 }
 
-.small-muted {
-    color: #94a3b8;
-    font-size: 0.88rem;
-}
-
 .info-box {
     background: rgba(30,41,59,0.65);
     border: 1px solid rgba(129,140,248,0.25);
@@ -253,22 +261,15 @@ h1, h2, h3, h4 {
     color: #dbeafe;
 }
 
-.stTextInput input,
-.stTextArea textarea {
+.stTextArea textarea,
+.stTextInput input {
     background: #0f172a !important;
     color: #f8fafc !important;
     border: 1px solid #334155 !important;
     border-radius: 12px !important;
 }
 
-.stTextInput input:focus,
-.stTextArea textarea:focus {
-    border-color: #818cf8 !important;
-    box-shadow: 0 0 0 2px rgba(129,140,248,0.20) !important;
-}
-
-.stSelectbox > div > div,
-.stMultiSelect > div > div {
+.stSelectbox > div > div {
     background: #0f172a !important;
     color: #f8fafc !important;
     border: 1px solid #334155 !important;
@@ -292,11 +293,6 @@ div.stButton > button {
     box-shadow: 0 10px 25px rgba(59,130,246,0.22);
 }
 
-div.stButton > button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 14px 34px rgba(124,58,237,0.30);
-}
-
 .footer {
     text-align: center;
     color: #64748b;
@@ -312,53 +308,49 @@ div.stButton > button:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sidebar ──────────────────────────────────────────────────────────────────
+# ── SIDEBAR ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.title("🎛️ Studio Panel")
-    st.caption("Professional AI image generation for creators and businesses.")
+    st.caption("AI image generation for creators and businesses")
 
-    plan_label = "Premium" if st.session_state.premium_user else "Free"
-    st.markdown(f"**Current access:** {plan_label}")
+    st.markdown(f"**Free images left:** {max(FREE_DAILY_LIMIT - st.session_state.generation_count, 0)}")
 
-    access_code = st.text_input("Premium access code", type="password")
-    if st.button("Unlock Premium"):
-        if access_code == PREMIUM_ACCESS_CODE:
-            st.session_state.premium_user = True
-            st.success("Premium unlocked.")
-        else:
-            st.error("Invalid premium access code.")
-
-    st.link_button("💎 Buy Premium", PREMIUM_LINK)
+    preset_choice = st.selectbox("Quick prompt preset", list(PROMPT_PRESETS.keys()))
 
     st.markdown("---")
-    preset_choice = st.selectbox("Quick prompt preset", list(PROMPT_PRESETS.keys()))
+    st.subheader("Upgrade")
+    st.write("Unlock more generation power and premium features.")
+    st.link_button("💎 Buy Premium", PREMIUM_LINK)
 
     st.markdown("---")
     st.subheader("Recent prompts")
     if st.session_state.history:
         for item in st.session_state.history[:5]:
             st.caption(item["time"])
-            st.write(item["prompt"][:80] + ("..." if len(item["prompt"]) > 80 else ""))
+            st.write(item["prompt"][:70] + ("..." if len(item["prompt"]) > 70 else ""))
             st.markdown("---")
     else:
-        st.caption("No prompt history yet.")
+        st.caption("No prompts yet.")
 
-# ── Hero ─────────────────────────────────────────────────────────────────────
+# ── HERO ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="hero">
     <div class="hero-title">{APP_NAME}</div>
-    <div class="hero-sub">{APP_TAGLINE}. Generate beautiful images for social media, products, ads, thumbnails, posters, and personal projects with a premium-looking AI platform.</div>
+    <div class="hero-sub">
+        {APP_TAGLINE}. Generate beautiful images for social media, products, ads,
+        thumbnails, posters, and personal projects with a premium-looking AI platform.
+    </div>
     <div class="badges">
         <span class="badge">🎨 Text to Image</span>
         <span class="badge">⚡ Fast Results</span>
         <span class="badge">💼 Creator Friendly</span>
-        <span class="badge">💎 Premium Generation</span>
+        <span class="badge">💎 Premium Plans</span>
         <span class="badge">⬇️ Instant Download</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── Features ─────────────────────────────────────────────────────────────────
+# ── FEATURES ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="section-card">
     <div class="section-title">Powerful features</div>
@@ -366,35 +358,34 @@ st.markdown("""
     <div class="feature-grid">
         <div class="feature-card">
             <div class="feature-title">Smart text-to-image</div>
-            <div class="feature-text">Transform simple words into cinematic scenes, portraits, product shots, and creative art in seconds.</div>
+            <div class="feature-text">Turn simple words into cinematic scenes, portraits, product shots, and creative visuals.</div>
         </div>
         <div class="feature-card">
-            <div class="feature-title">Free & premium modes</div>
-            <div class="feature-text">Offer standard generation for visitors and unlock premium quality, more styles, and stronger controls for paid users.</div>
+            <div class="feature-title">Free & premium access</div>
+            <div class="feature-text">Offer standard generation for visitors and upgrade options for users who need more power.</div>
         </div>
         <div class="feature-card">
-            <div class="feature-title">Ready for business</div>
-            <div class="feature-text">Use it as a public tool website, creator brand, startup portfolio, or monetized AI platform for visitors.</div>
+            <div class="feature-title">Business-ready layout</div>
+            <div class="feature-text">Use it as a public AI tool, creator platform, or startup-style website for monetization.</div>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── About + Pricing ──────────────────────────────────────────────────────────
+# ── ABOUT + PRICING ──────────────────────────────────────────────────────────
 col_about, col_pricing = st.columns([1.2, 1])
 
 with col_about:
     st.markdown("""
     <div class="section-card">
         <div class="section-title">About us</div>
-        <div class="section-sub">A polished AI product page for your website visitors.</div>
+        <div class="section-sub">A polished AI product page for your visitors.</div>
         <div class="about-box">
-            <b>PixelMuse AI</b> is built for people who want quick, beautiful AI-generated images without a complicated workflow.
-            Our mission is to make creative image generation simple, elegant, and accessible for creators, students, marketers,
-            business owners, and anyone who needs stunning visuals on demand.
+            <b>PixelMuse AI</b> helps people create beautiful AI-generated images quickly and easily.
+            This platform is designed for creators, students, marketers, business owners, and anyone
+            who needs high-quality visuals without a complicated workflow.
             <br><br>
-            The platform is designed with a clean premium interface, fast generation flow, and upgrade options for users who need
-            more power, better output quality, and advanced creative tools.
+            Our goal is to make AI image generation simple, attractive, and useful for everyday creative work.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -403,15 +394,15 @@ with col_pricing:
     st.markdown("""
     <div class="section-card">
         <div class="section-title">Pricing plans</div>
-        <div class="section-sub">Present your monetization clearly.</div>
+        <div class="section-sub">Simple monetization display.</div>
         <div class="price-grid">
             <div class="price-card">
                 <div class="price-name">Free</div>
                 <div class="price-amount">$0</div>
                 <div class="price-list">
+                    • Limited daily images<br>
                     • Standard generation<br>
-                    • Basic styles<br>
-                    • Public visitors welcome<br>
+                    • Basic model access<br>
                     • Instant download
                 </div>
             </div>
@@ -419,63 +410,65 @@ with col_pricing:
                 <div class="price-name">Premium</div>
                 <div class="price-amount">$9/mo</div>
                 <div class="price-list">
-                    • Better generation options<br>
-                    • Premium styles & quality<br>
-                    • Stronger prompt control<br>
-                    • Faster creative workflow
+                    • More daily images<br>
+                    • Better models<br>
+                    • Faster workflow<br>
+                    • Premium features
                 </div>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ── Generator ────────────────────────────────────────────────────────────────
+# ── GENERATOR ────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="section-card">
     <div class="section-title">AI image generator</div>
-    <div class="section-sub">Let visitors generate images directly from your website.</div>
+    <div class="section-sub">Create images directly from your website.</div>
 </div>
 """, unsafe_allow_html=True)
 
 default_prompt = PROMPT_PRESETS[preset_choice] if preset_choice != "None" else ""
 
-left, right = st.columns([1.1, 0.9])
+left, right = st.columns([1.15, 0.85])
 
 with left:
     prompt = st.text_area(
         "Prompt",
         value=default_prompt,
-        placeholder="Example: A luxury jewelry product photo on a dark reflective surface, soft spotlight, premium advertisement, realistic, ultra detailed",
+        placeholder="Example: A luxury perfume bottle on a marble table, premium ad photography, soft shadows, realistic, ultra detailed",
         height=150,
     )
 
     negative_prompt = st.text_area(
         "Negative prompt",
-        placeholder="Optional: blurry, watermark, text, extra fingers, low quality, distorted face",
+        placeholder="Optional: blurry, watermark, extra fingers, distorted face, low quality, text",
         height=90,
     )
 
     with st.expander("Sample prompt ideas"):
-        st.write("**Product ad:** Luxury perfume bottle on marble surface, premium ad photography, elegant lighting, realistic")
-        st.write("**Portrait:** Confident young woman in studio lighting, fashion magazine style, detailed face, realistic")
-        st.write("**Fantasy:** A magical forest with glowing lights, dreamy atmosphere, epic fantasy art, highly detailed")
-        st.write("**Thumbnail:** Dramatic cyberpunk city skyline, vibrant neon lights, cinematic, high contrast")
+        st.write("**Product ad:** Luxury skincare bottle, studio light, premium ad photography, realistic")
+        st.write("**Portrait:** Elegant woman in soft studio lighting, fashion magazine style, detailed face")
+        st.write("**Fantasy:** Magical forest with glowing flowers, dreamy atmosphere, epic fantasy art")
+        st.write("**Thumbnail:** Cyberpunk city skyline, dramatic lighting, vibrant neon colors")
 
 with right:
-    model_label = st.selectbox("Model", list(MODELS.keys()))
-    model_id = MODELS[model_label]
+    # free users get only free models
+    model_source = FREE_MODELS
+    model_label = st.selectbox("Model", list(model_source.keys()))
+    model_id = model_source[model_label]
 
-    style_options = ["Realistic", "Cinematic", "Fantasy", "Anime", "Product Photography", "Minimal"]
-    style_choice = st.selectbox("Style direction", style_options)
+    style_choice = st.selectbox(
+        "Style direction",
+        ["Realistic", "Cinematic", "Fantasy", "Anime", "Product Photography", "Minimal"]
+    )
 
-    if st.session_state.premium_user:
-        guidance = st.slider("Guidance scale", 1.0, 20.0, 8.5, 0.5)
-        steps = st.slider("Inference steps", 10, 50, 30, 5)
-        st.markdown('<div class="success-box"><b>Premium enabled:</b> Advanced generation controls are unlocked.</div>', unsafe_allow_html=True)
-    else:
-        guidance = 7.5
-        steps = 20
-        st.markdown('<div class="info-box"><b>Free mode:</b> Premium users get stronger controls and enhanced generation settings.</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="info-box">
+        <b>Free mode:</b> visitors can generate a limited number of images each day.
+        Upgrade users can be redirected to your premium page.
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="prompt-box">
@@ -484,14 +477,17 @@ with right:
     </div>
     """, unsafe_allow_html=True)
 
-# ── Generate logic ───────────────────────────────────────────────────────────
+# ── GENERATE LOGIC ───────────────────────────────────────────────────────────
 generate = st.button("🎨 Generate Image")
 
 if generate:
     if not HF_TOKEN:
-        st.error("Owner API token is missing. Add HF_TOKEN in Streamlit secrets first.")
+        st.error("HF_TOKEN is missing. Add it in Streamlit Secrets.")
     elif not prompt.strip():
         st.error("Please enter a prompt.")
+    elif st.session_state.generation_count >= FREE_DAILY_LIMIT:
+        st.warning("Free limit reached. Please upgrade to Premium.")
+        st.link_button("💎 Upgrade to Premium", PREMIUM_LINK)
     else:
         final_prompt = f"{prompt}, {style_choice.lower()} style"
 
@@ -501,18 +497,21 @@ if generate:
             "inputs": final_prompt,
             "parameters": {
                 "negative_prompt": negative_prompt or "",
-                "guidance_scale": guidance,
-                "num_inference_steps": steps,
+                "guidance_scale": 7.5,
+                "num_inference_steps": 20,
             }
         }
 
-        with st.spinner("Generating your image... please wait a few moments."):
+        with st.spinner("Generating your image..."):
             try:
                 response = requests.post(api_url, headers=headers, json=payload, timeout=120)
 
                 if response.status_code == 200:
                     image = Image.open(io.BytesIO(response.content))
                     st.image(image, use_container_width=True)
+
+                    if SHOW_WATERMARK_NOTE:
+                        st.caption("Free version image generated successfully.")
 
                     buf = io.BytesIO()
                     image.save(buf, format="PNG")
@@ -524,15 +523,16 @@ if generate:
                         mime="image/png",
                     )
 
+                    st.session_state.generation_count += 1
                     st.session_state.history.insert(0, {
                         "time": datetime.now().strftime("%d %b %Y • %I:%M %p"),
                         "prompt": final_prompt
                     })
 
                 elif response.status_code == 503:
-                    st.warning("The model is loading right now. Wait 20–30 seconds and try again.")
+                    st.warning("The model is loading. Wait 20–30 seconds and try again.")
                 elif response.status_code == 401:
-                    st.error("The hidden API token is invalid. Update HF_TOKEN in Streamlit secrets.")
+                    st.error("Invalid HF token in Streamlit Secrets.")
                 else:
                     st.error(f"API Error {response.status_code}: {response.text[:300]}")
 
@@ -541,11 +541,11 @@ if generate:
             except Exception as e:
                 st.error(f"Unexpected error: {e}")
 
-# ── History ──────────────────────────────────────────────────────────────────
+# ── HISTORY ──────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="section-card">
     <div class="section-title">Recent generations</div>
-    <div class="section-sub">Show users that the platform is active and useful.</div>
+    <div class="section-sub">Generated prompts will appear here.</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -556,20 +556,18 @@ if st.session_state.history:
             unsafe_allow_html=True
         )
 else:
-    st.markdown('<div class="prompt-box">Generated prompt history will appear here after image generation.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="prompt-box">No generated history yet.</div>', unsafe_allow_html=True)
 
 # ── CTA ──────────────────────────────────────────────────────────────────────
 cta1, cta2 = st.columns(2)
-
 with cta1:
     st.link_button("💎 Upgrade to Premium", PREMIUM_LINK)
-
 with cta2:
     st.button("🚀 Start Creating")
 
-# ── Footer ───────────────────────────────────────────────────────────────────
+# ── FOOTER ───────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="footer">
-    © 2026 {APP_NAME} • Professional AI image generation platform • Built with Streamlit
+    © 2026 {APP_NAME} • Professional AI image generation platform
 </div>
 """, unsafe_allow_html=True)
