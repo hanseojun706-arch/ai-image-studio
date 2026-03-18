@@ -24,6 +24,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
 from huggingface_hub import InferenceClient
 import streamlit as st
 from PIL import Image
