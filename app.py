@@ -2,23 +2,24 @@ import streamlit as st
 import requests
 from PIL import Image
 import io
-from datetime import datetime
+import datetime
+from datetime import datetime as dt
 
 # =========================================================
 # APP CONFIG — EDIT THESE
 # =========================================================
 APP_NAME = "AI Image Studio"
-APP_TAGLINE = "Create stunning AI images in seconds for social media, ads, and creative projects."
-PREMIUM_LINK = "https://your-payment-link.com"  # Replace later
-FREE_DAILY_LIMIT = 3
+APP_TAGLINE = "Create stunning AI images in seconds for social media, ads, thumbnails, and creative projects."
+PREMIUM_LINK = "https://your-payment-link.com"   # Replace later
+FREE_DAILY_LIMIT = 1
 
-# Hugging Face token from Streamlit Secrets
-# Add in Streamlit Secrets:
+# Token from Streamlit Secrets
+# In Streamlit Secrets, add:
 # HF_TOKEN = "hf_your_token_here"
 HF_TOKEN = st.secrets.get("HF_TOKEN", "")
 
 # =========================================================
-# PAGE CONFIG
+# PAGE SETUP
 # =========================================================
 st.set_page_config(
     page_title=APP_NAME,
@@ -27,16 +28,21 @@ st.set_page_config(
 )
 
 # =========================================================
-# SESSION STATE
+# DAILY LIMIT SYSTEM
 # =========================================================
-if "generation_count" not in st.session_state:
-    st.session_state.generation_count = 0
+today = str(datetime.date.today())
+
+if "usage" not in st.session_state:
+    st.session_state.usage = {"date": today, "count": 0}
+
+if st.session_state.usage["date"] != today:
+    st.session_state.usage = {"date": today, "count": 0}
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
 # =========================================================
-# MODELS AND PRESETS
+# MODELS
 # =========================================================
 MODELS = {
     "Stable Diffusion XL - Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
@@ -44,14 +50,18 @@ MODELS = {
     "Dreamlike Photoreal - Realistic photos": "dreamlike-art/dreamlike-photoreal-2.0",
 }
 
+# =========================================================
+# PRESETS
+# =========================================================
 PROMPT_PRESETS = {
     "None": "",
     "Cinematic City": "A futuristic city street at night, neon reflections, rainy atmosphere, cinematic lighting, ultra detailed, 8k",
     "Fantasy Forest": "A magical forest with glowing mushrooms, floating lights, fantasy art, dreamy, highly detailed",
-    "Luxury Product": "Luxury perfume bottle on marble surface, premium ad photography, soft shadows, realistic",
-    "Fashion Portrait": "Elegant woman in studio lighting, high fashion photography, realistic, detailed face",
+    "Luxury Product": "Luxury perfume bottle on marble surface, premium ad photography, soft shadows, realistic, ultra detailed",
+    "Fashion Portrait": "Elegant woman in studio lighting, high fashion photography, realistic skin texture, detailed face",
     "Village Sunrise": "A peaceful mountain village at sunrise, soft golden light, cinematic atmosphere, realistic, ultra detailed",
-    "Anime Scene": "A beautiful anime-style scene with cherry blossoms, soft lighting, vibrant colors, dreamy composition",
+    "Anime Scene": "A beautiful anime-style scene under cherry blossoms, soft lighting, vibrant colors, dreamy composition",
+    "Food Photography": "A premium dessert on a restaurant table, soft light, bokeh background, realistic food photography",
 }
 
 # =========================================================
@@ -63,12 +73,12 @@ st.markdown("""
 
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
-    background: linear-gradient(180deg, #080911 0%, #0f172a 100%);
+    background: linear-gradient(180deg, #070b14 0%, #0f172a 100%);
     color: #f8fafc;
 }
 
 .stApp {
-    background: linear-gradient(180deg, #080911 0%, #0f172a 100%);
+    background: linear-gradient(180deg, #070b14 0%, #0f172a 100%);
 }
 
 h1, h2, h3, h4 {
@@ -82,12 +92,12 @@ h1, h2, h3, h4 {
     padding-bottom: 2rem;
 }
 
-.hero {
+.hero-box {
     padding: 2.5rem 2rem;
     border-radius: 28px;
     background:
-        radial-gradient(circle at top left, rgba(124,58,237,0.28), transparent 35%),
-        radial-gradient(circle at top right, rgba(59,130,246,0.25), transparent 32%),
+        radial-gradient(circle at top left, rgba(124,58,237,0.30), transparent 35%),
+        radial-gradient(circle at top right, rgba(59,130,246,0.24), transparent 32%),
         linear-gradient(135deg, rgba(15,23,42,0.96), rgba(17,24,39,0.93));
     border: 1px solid rgba(255,255,255,0.08);
     box-shadow: 0 15px 50px rgba(0,0,0,0.28);
@@ -95,7 +105,7 @@ h1, h2, h3, h4 {
 }
 
 .hero-title {
-    font-size: 3.5rem;
+    font-size: 3.6rem;
     font-weight: 800;
     line-height: 1.02;
     margin-bottom: 0.6rem;
@@ -108,7 +118,7 @@ h1, h2, h3, h4 {
     color: #cbd5e1;
     font-size: 1.05rem;
     max-width: 760px;
-    line-height: 1.7;
+    line-height: 1.75;
 }
 
 .badges {
@@ -240,6 +250,17 @@ h1, h2, h3, h4 {
     margin-top: 0.8rem;
 }
 
+.warning-box {
+    background: rgba(48, 22, 22, 0.82);
+    border: 1px solid rgba(248,113,113,0.25);
+    border-left: 4px solid #ef4444;
+    border-radius: 14px;
+    padding: 1rem;
+    color: #fecaca;
+    font-size: 0.92rem;
+    margin-top: 0.8rem;
+}
+
 .prompt-box {
     background: rgba(15,23,42,0.7);
     border: 1px dashed rgba(255,255,255,0.12);
@@ -313,14 +334,14 @@ with st.sidebar:
     st.title("🎛️ Studio Panel")
     st.caption("AI image generation for creators and businesses")
 
-    free_left = max(FREE_DAILY_LIMIT - st.session_state.generation_count, 0)
-    st.markdown(f"**Free images left:** {free_left}")
+    free_left = max(FREE_DAILY_LIMIT - st.session_state.usage["count"], 0)
+    st.markdown(f"**Free images left today:** {free_left}")
 
     preset_choice = st.selectbox("Quick prompt preset", list(PROMPT_PRESETS.keys()))
 
     st.markdown("---")
     st.subheader("Upgrade")
-    st.write("Unlock more power and premium features.")
+    st.write("Unlock more generation power and premium features.")
     st.link_button("💎 Buy Premium", PREMIUM_LINK)
 
     st.markdown("---")
@@ -337,7 +358,7 @@ with st.sidebar:
 # HERO
 # =========================================================
 st.markdown(f"""
-<div class="hero">
+<div class="hero-box">
     <div class="hero-title">{APP_NAME}</div>
     <div class="hero-sub">
         {APP_TAGLINE}
@@ -405,7 +426,7 @@ with col_pricing:
                 <div class="price-name">Free</div>
                 <div class="price-amount">$0</div>
                 <div class="price-list">
-                    • Limited daily images<br>
+                    • 1 image per day<br>
                     • Standard generation<br>
                     • Basic model access<br>
                     • Instant download
@@ -470,8 +491,8 @@ with right:
 
     st.markdown("""
     <div class="info-box">
-        <b>Free mode:</b> visitors can generate a limited number of images each day.
-        Upgrade users can be redirected to your premium page.
+        <b>Free mode:</b> visitors can generate only 1 image per day.
+        Upgrade users can continue with premium access.
     </div>
     """, unsafe_allow_html=True)
 
@@ -490,11 +511,19 @@ generate = st.button("🎨 Generate Image")
 if generate:
     if not HF_TOKEN:
         st.error("HF_TOKEN is missing. Add it in Streamlit Secrets.")
+
     elif not prompt.strip():
         st.error("Please enter a prompt.")
-    elif st.session_state.generation_count >= FREE_DAILY_LIMIT:
-        st.warning("Free limit reached. Please upgrade to Premium.")
+
+    elif st.session_state.usage["count"] >= FREE_DAILY_LIMIT:
+        st.markdown("""
+        <div class="warning-box">
+            <b>Free limit reached!</b><br><br>
+            Unlock premium to continue generating more images with faster access and better experience.
+        </div>
+        """, unsafe_allow_html=True)
         st.link_button("💎 Upgrade to Premium", PREMIUM_LINK)
+
     else:
         final_prompt = f"{prompt}, {style_choice.lower()} style"
 
@@ -527,9 +556,9 @@ if generate:
                         mime="image/png",
                     )
 
-                    st.session_state.generation_count += 1
+                    st.session_state.usage["count"] += 1
                     st.session_state.history.insert(0, {
-                        "time": datetime.now().strftime("%d %b %Y • %I:%M %p"),
+                        "time": dt.now().strftime("%d %b %Y • %I:%M %p"),
                         "prompt": final_prompt
                     })
 
