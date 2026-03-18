@@ -24,7 +24,31 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+from huggingface_hub import InferenceClient
+import streamlit as st
+from PIL import Image
 
+HF_TOKEN = st.secrets.get("HF_TOKEN", "")
+
+def generate_image(prompt: str):
+    if not HF_TOKEN:
+        return {"ok": False, "error": "HF_TOKEN is missing in Streamlit Secrets."}
+
+    try:
+        client = InferenceClient(
+            provider="hf-inference",
+            api_key=HF_TOKEN,
+        )
+
+        image = client.text_to_image(
+            prompt,
+            model="black-forest-labs/FLUX.1-Krea-dev"
+        )
+
+        return {"ok": True, "image": image}
+
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 # --------------------------------------------------
 # SESSION STATE
 # --------------------------------------------------
