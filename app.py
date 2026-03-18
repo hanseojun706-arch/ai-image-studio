@@ -6,14 +6,26 @@ from datetime import datetime
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AI Image Studio",
+    page_title="PixelMuse AI",
     page_icon="🎨",
-    layout="centered",
+    layout="wide",
 )
+
+# ── App config ───────────────────────────────────────────────────────────────
+APP_NAME = "PixelMuse AI"
+APP_TAGLINE = "Create stunning AI-generated images in seconds"
+PREMIUM_LINK = "https://your-payment-link.com"   # replace later
+PREMIUM_ACCESS_CODE = "PREMIUM2026"              # replace later
 
 # ── Session state ────────────────────────────────────────────────────────────
 if "history" not in st.session_state:
     st.session_state.history = []
+
+if "premium_user" not in st.session_state:
+    st.session_state.premium_user = False
+
+# ── Secrets / token ──────────────────────────────────────────────────────────
+HF_TOKEN = st.secrets.get("HF_TOKEN", "")
 
 # ── Prompt presets ───────────────────────────────────────────────────────────
 PROMPT_PRESETS = {
@@ -23,100 +35,181 @@ PROMPT_PRESETS = {
     "Luxury Product": "Luxury perfume bottle on a marble surface, soft shadows, premium ad photography, elegant composition, realistic",
     "Fashion Portrait": "Elegant woman in royal blue dress, studio lighting, high fashion photography, detailed face, realistic skin texture",
     "Village Sunrise": "A dreamy mountain village at sunrise, soft golden light, cinematic atmosphere, ultra detailed, realistic, 8k",
+    "Anime Scene": "A beautiful anime-style girl standing under cherry blossoms, soft lighting, vibrant colors, dreamy composition",
+    "Food Photography": "A premium dessert on a restaurant table, soft light, bokeh background, realistic food photography, detailed textures",
 }
 
-# ── Custom CSS ───────────────────────────────────────────────────────────────
+MODELS = {
+    "Stable Diffusion XL — Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
+    "FLUX.1-schnell — Ultra fast": "black-forest-labs/FLUX.1-schnell",
+    "Dreamlike Photoreal — Realistic photos": "dreamlike-art/dreamlike-photoreal-2.0",
+}
+
+# ── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-    background: linear-gradient(180deg, #08080d 0%, #0d1020 100%);
-    color: #f3f4f6;
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(180deg, #080911 0%, #0f172a 100%);
+    color: #f8fafc;
 }
 
 .stApp {
-    background: linear-gradient(180deg, #08080d 0%, #0d1020 100%);
+    background: linear-gradient(180deg, #080911 0%, #0f172a 100%);
 }
 
-h1, h2, h3 {
+h1, h2, h3, h4 {
     font-family: 'Syne', sans-serif !important;
     color: #ffffff !important;
 }
 
-.main-wrap {
-    max-width: 860px;
-    margin: auto;
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+    max-width: 1250px;
 }
 
-.hero-box {
-    background: linear-gradient(135deg, rgba(124,58,237,0.18), rgba(59,130,246,0.14));
+.hero {
+    padding: 2.5rem 2rem;
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at top left, rgba(124,58,237,0.30), transparent 35%),
+        radial-gradient(circle at top right, rgba(59,130,246,0.25), transparent 32%),
+        linear-gradient(135deg, rgba(15,23,42,0.95), rgba(17,24,39,0.92));
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 24px;
-    padding: 2rem 1.5rem;
-    margin-bottom: 1.25rem;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+    box-shadow: 0 15px 50px rgba(0,0,0,0.28);
+    margin-bottom: 1rem;
 }
 
 .hero-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 3rem;
+    font-size: 3.5rem;
     font-weight: 800;
-    line-height: 1.05;
-    text-align: center;
-    background: linear-gradient(135deg, #e9d5ff, #a5b4fc, #7dd3fc);
+    line-height: 1.02;
+    margin-bottom: 0.6rem;
+    background: linear-gradient(135deg, #f3e8ff, #bfdbfe, #7dd3fc);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 0.5rem;
 }
 
 .hero-sub {
-    text-align: center;
     color: #cbd5e1;
-    font-size: 1rem;
-    max-width: 650px;
-    margin: 0 auto 1rem auto;
+    font-size: 1.05rem;
+    max-width: 760px;
+    line-height: 1.7;
 }
 
 .badges {
-    text-align: center;
-    margin-top: 0.75rem;
+    margin-top: 1rem;
 }
 
 .badge {
     display: inline-block;
-    padding: 0.4rem 0.8rem;
-    margin: 0.25rem;
+    padding: 0.45rem 0.85rem;
+    margin: 0.25rem 0.35rem 0 0;
     border-radius: 999px;
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(255,255,255,0.08);
     color: #dbeafe;
-    font-size: 0.82rem;
+    font-size: 0.84rem;
 }
 
 .section-card {
-    background: rgba(17,24,39,0.85);
+    background: rgba(15,23,42,0.88);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 22px;
+    padding: 1.2rem;
+    box-shadow: 0 12px 35px rgba(0,0,0,0.18);
+    margin-bottom: 1rem;
+}
+
+.section-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.35rem;
+}
+
+.section-sub {
+    color: #94a3b8;
+    font-size: 0.96rem;
+    margin-bottom: 1rem;
+}
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.feature-card {
+    background: rgba(30,41,59,0.72);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 18px;
+    padding: 1rem;
+}
+
+.feature-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+}
+
+.feature-text {
+    color: #cbd5e1;
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+
+.about-box {
+    background: rgba(30,41,59,0.60);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 18px;
+    padding: 1rem;
+    color: #cbd5e1;
+    line-height: 1.75;
+}
+
+.price-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.price-card {
+    background: rgba(15,23,42,0.95);
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 20px;
     padding: 1.2rem;
-    margin-bottom: 1rem;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
 }
 
-.section-label {
+.price-card.premium {
+    border: 1px solid rgba(168,85,247,0.45);
+    box-shadow: 0 12px 30px rgba(124,58,237,0.16);
+}
+
+.price-name {
     font-family: 'Syne', sans-serif;
-    font-size: 0.82rem;
+    font-size: 1.2rem;
     font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #93c5fd;
-    margin-bottom: 0.6rem;
 }
 
-.muted {
+.price-amount {
+    font-size: 2rem;
+    font-weight: 800;
+    margin: 0.35rem 0 0.8rem 0;
+}
+
+.price-list {
+    color: #dbeafe;
+    line-height: 1.9;
+    font-size: 0.95rem;
+}
+
+.small-muted {
     color: #94a3b8;
-    font-size: 0.92rem;
+    font-size: 0.88rem;
 }
 
 .info-box {
@@ -125,30 +218,39 @@ h1, h2, h3 {
     border-left: 4px solid #818cf8;
     border-radius: 14px;
     padding: 1rem;
-    margin-top: 0.8rem;
     color: #dbeafe;
     font-size: 0.92rem;
+    margin-top: 0.8rem;
 }
 
-.tip-box {
-    background: rgba(20, 35, 28, 0.85);
-    border: 1px solid rgba(74, 222, 128, 0.22);
+.success-box {
+    background: rgba(20,35,28,0.82);
+    border: 1px solid rgba(74,222,128,0.25);
     border-left: 4px solid #4ade80;
     border-radius: 14px;
     padding: 1rem;
-    margin-top: 0.8rem;
     color: #bbf7d0;
     font-size: 0.92rem;
+    margin-top: 0.8rem;
 }
 
-.sample-box {
-    background: rgba(15,23,42,0.78);
+.prompt-box {
+    background: rgba(15,23,42,0.7);
     border: 1px dashed rgba(255,255,255,0.12);
     border-radius: 14px;
     padding: 0.9rem 1rem;
     color: #cbd5e1;
-    font-size: 0.9rem;
+    font-size: 0.92rem;
     margin-top: 0.8rem;
+}
+
+.history-card {
+    background: rgba(30,41,59,0.55);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 0.85rem;
+    margin-bottom: 0.7rem;
+    color: #dbeafe;
 }
 
 .stTextInput input,
@@ -166,105 +268,70 @@ h1, h2, h3 {
 }
 
 .stSelectbox > div > div,
-.stNumberInput input {
+.stMultiSelect > div > div {
     background: #0f172a !important;
     color: #f8fafc !important;
     border: 1px solid #334155 !important;
     border-radius: 12px !important;
 }
 
-.stSlider {
-    color: #e5e7eb !important;
+div.stButton > button,
+a[data-testid="stLinkButton"] {
+    width: 100%;
+    border-radius: 14px !important;
+    font-weight: 700 !important;
 }
 
 div.stButton > button {
-    width: 100%;
     border: none;
-    border-radius: 14px;
     padding: 0.85rem 1rem;
     font-family: 'Syne', sans-serif;
-    font-weight: 700;
     font-size: 1rem;
     color: white;
     background: linear-gradient(135deg, #7c3aed, #2563eb);
-    box-shadow: 0 10px 25px rgba(59,130,246,0.25);
-    transition: all 0.25s ease;
+    box-shadow: 0 10px 25px rgba(59,130,246,0.22);
 }
 
 div.stButton > button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 12px 32px rgba(124,58,237,0.35);
+    box-shadow: 0 14px 34px rgba(124,58,237,0.30);
 }
 
-.image-caption {
-    text-align: center;
-    color: #94a3b8;
-    font-size: 0.85rem;
-    margin-top: 0.5rem;
-}
-
-.premium-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.price-card {
-    background: rgba(15,23,42,0.9);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 18px;
-    padding: 1rem;
-}
-
-.price-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #ffffff;
-    margin-bottom: 0.35rem;
-}
-
-.price-sub {
-    color: #94a3b8;
-    margin-bottom: 0.8rem;
-}
-
-.price-list {
-    color: #e2e8f0;
-    font-size: 0.94rem;
-    line-height: 1.8;
-}
-
-.history-item {
-    background: rgba(15,23,42,0.65);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
-    padding: 0.8rem;
-    margin-bottom: 0.6rem;
-    color: #cbd5e1;
-    font-size: 0.9rem;
-}
-
-.footer-note {
+.footer {
     text-align: center;
     color: #64748b;
-    font-size: 0.82rem;
-    padding-bottom: 1rem;
+    font-size: 0.85rem;
+    padding: 1rem 0 0.5rem 0;
 }
 
-@media (max-width: 700px) {
-    .hero-title { font-size: 2.2rem; }
-    .premium-grid { grid-template-columns: 1fr; }
+@media (max-width: 900px) {
+    .feature-grid { grid-template-columns: 1fr; }
+    .price-grid { grid-template-columns: 1fr; }
+    .hero-title { font-size: 2.5rem; }
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("🎨 Studio Tools")
-    st.write("Use presets, view history, and plan premium upgrades.")
+    st.title("🎛️ Studio Panel")
+    st.caption("Professional AI image generation for creators and businesses.")
 
-    selected_preset = st.selectbox("Quick prompt preset", list(PROMPT_PRESETS.keys()))
+    plan_label = "Premium" if st.session_state.premium_user else "Free"
+    st.markdown(f"**Current access:** {plan_label}")
+
+    access_code = st.text_input("Premium access code", type="password")
+    if st.button("Unlock Premium"):
+        if access_code == PREMIUM_ACCESS_CODE:
+            st.session_state.premium_user = True
+            st.success("Premium unlocked.")
+        else:
+            st.error("Invalid premium access code.")
+
+    st.link_button("💎 Buy Premium", PREMIUM_LINK)
+
+    st.markdown("---")
+    preset_choice = st.selectbox("Quick prompt preset", list(PROMPT_PRESETS.keys()))
 
     st.markdown("---")
     st.subheader("Recent prompts")
@@ -274,247 +341,235 @@ with st.sidebar:
             st.write(item["prompt"][:80] + ("..." if len(item["prompt"]) > 80 else ""))
             st.markdown("---")
     else:
-        st.caption("No prompts yet.")
+        st.caption("No prompt history yet.")
 
-    st.subheader("Premium idea")
-    st.write("Sell premium prompt packs, creator templates, or faster access.")
-    st.link_button("Buy Premium", "https://gumroad.com/")
-
-# ── Wrapper start ────────────────────────────────────────────────────────────
-st.markdown('<div class="main-wrap">', unsafe_allow_html=True)
-
-# ── Hero section ─────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="hero-box">
-    <div class="hero-title">✨ AI Image Studio</div>
-    <div class="hero-sub">
-        Turn your words into stunning visuals with free AI image models.
-        Generate art, posters, cinematic scenes, product mockups, and social content in seconds.
-    </div>
+# ── Hero ─────────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="hero">
+    <div class="hero-title">{APP_NAME}</div>
+    <div class="hero-sub">{APP_TAGLINE}. Generate beautiful images for social media, products, ads, thumbnails, posters, and personal projects with a premium-looking AI platform.</div>
     <div class="badges">
-        <span class="badge">🎨 AI Art</span>
-        <span class="badge">⚡ Fast Generation</span>
-        <span class="badge">🆓 Free Models</span>
+        <span class="badge">🎨 Text to Image</span>
+        <span class="badge">⚡ Fast Results</span>
+        <span class="badge">💼 Creator Friendly</span>
+        <span class="badge">💎 Premium Generation</span>
         <span class="badge">⬇️ Instant Download</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── API section ──────────────────────────────────────────────────────────────
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Hugging Face API Token</div>', unsafe_allow_html=True)
-st.markdown('<div class="muted">Enter your free Hugging Face token to generate images.</div>', unsafe_allow_html=True)
-
-hf_token = st.text_input(
-    "HF Token",
-    placeholder="hf_xxxxxxxxxxxxxxxxxxxxx",
-    type="password",
-    label_visibility="collapsed"
-)
-
+# ── Features ─────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class="info-box">
-<b>How to get a free token:</b><br>
-Go to <b>huggingface.co</b> → <b>Settings</b> → <b>Access Tokens</b> → <b>New Token</b> → choose <b>Read</b>.
+<div class="section-card">
+    <div class="section-title">Powerful features</div>
+    <div class="section-sub">Everything users need in a modern AI image generation website.</div>
+    <div class="feature-grid">
+        <div class="feature-card">
+            <div class="feature-title">Smart text-to-image</div>
+            <div class="feature-text">Transform simple words into cinematic scenes, portraits, product shots, and creative art in seconds.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-title">Free & premium modes</div>
+            <div class="feature-text">Offer standard generation for visitors and unlock premium quality, more styles, and stronger controls for paid users.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-title">Ready for business</div>
+            <div class="feature-text">Use it as a public tool website, creator brand, startup portfolio, or monetized AI platform for visitors.</div>
+        </div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
-# ── Model section ────────────────────────────────────────────────────────────
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Choose Your Model</div>', unsafe_allow_html=True)
+# ── About + Pricing ──────────────────────────────────────────────────────────
+col_about, col_pricing = st.columns([1.2, 1])
 
-MODELS = {
-    "Stable Diffusion 3.5 Medium — Best overall quality": "stabilityai/stable-diffusion-3.5-medium",
-    "Stable Diffusion XL — Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
-    "FLUX.1-schnell — Ultra fast": "black-forest-labs/FLUX.1-schnell",
-    "Dreamlike Photoreal — Realistic photos": "dreamlike-art/dreamlike-photoreal-2.0",
-}
+with col_about:
+    st.markdown("""
+    <div class="section-card">
+        <div class="section-title">About us</div>
+        <div class="section-sub">A polished AI product page for your website visitors.</div>
+        <div class="about-box">
+            <b>PixelMuse AI</b> is built for people who want quick, beautiful AI-generated images without a complicated workflow.
+            Our mission is to make creative image generation simple, elegant, and accessible for creators, students, marketers,
+            business owners, and anyone who needs stunning visuals on demand.
+            <br><br>
+            The platform is designed with a clean premium interface, fast generation flow, and upgrade options for users who need
+            more power, better output quality, and advanced creative tools.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-model_label = st.selectbox(
-    "Model",
-    list(MODELS.keys()),
-    label_visibility="collapsed"
-)
-model_id = MODELS[model_label]
+with col_pricing:
+    st.markdown("""
+    <div class="section-card">
+        <div class="section-title">Pricing plans</div>
+        <div class="section-sub">Present your monetization clearly.</div>
+        <div class="price-grid">
+            <div class="price-card">
+                <div class="price-name">Free</div>
+                <div class="price-amount">$0</div>
+                <div class="price-list">
+                    • Standard generation<br>
+                    • Basic styles<br>
+                    • Public visitors welcome<br>
+                    • Instant download
+                </div>
+            </div>
+            <div class="price-card premium">
+                <div class="price-name">Premium</div>
+                <div class="price-amount">$9/mo</div>
+                <div class="price-list">
+                    • Better generation options<br>
+                    • Premium styles & quality<br>
+                    • Stronger prompt control<br>
+                    • Faster creative workflow
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-st.markdown(f"""
-<div class="sample-box">
-<b>Selected model:</b> {model_label}
-</div>
-""", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
-
-# ── Prompt section ───────────────────────────────────────────────────────────
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Describe Your Image</div>', unsafe_allow_html=True)
-
-default_prompt = PROMPT_PRESETS[selected_preset] if selected_preset != "None" else ""
-
-prompt = st.text_area(
-    "Prompt",
-    value=default_prompt,
-    placeholder="Example: A dreamy mountain village at sunrise, soft golden light, cinematic atmosphere, ultra detailed, realistic, 8k",
-    height=120,
-    label_visibility="collapsed"
-)
-
-negative_prompt = st.text_area(
-    "Negative Prompt",
-    placeholder="Optional: blurry, low quality, watermark, extra fingers, distorted face, text",
-    height=80,
-    label_visibility="collapsed"
-)
-
+# ── Generator ────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class="tip-box">
-<b>Prompt tip:</b> Add style words like <i>cinematic, realistic, soft lighting, ultra detailed, 8k, studio quality, pastel colors</i>.
+<div class="section-card">
+    <div class="section-title">AI image generator</div>
+    <div class="section-sub">Let visitors generate images directly from your website.</div>
 </div>
 """, unsafe_allow_html=True)
 
-with st.expander("See sample prompts"):
-    st.write("**Cinematic:** A futuristic city street at night, neon reflections, rainy atmosphere, cinematic lighting, ultra detailed")
-    st.write("**Fantasy:** A magical forest with glowing mushrooms, floating lights, fantasy art, dreamy, highly detailed")
-    st.write("**Product shot:** Luxury perfume bottle on marble surface, soft shadows, premium ad photography, realistic")
-    st.write("**Portrait:** Elegant woman in royal blue dress, studio lighting, high fashion photography, detailed face")
+default_prompt = PROMPT_PRESETS[preset_choice] if preset_choice != "None" else ""
 
-with st.expander("Prompt preview"):
-    if prompt.strip():
-        st.code(prompt, language=None)
+left, right = st.columns([1.1, 0.9])
+
+with left:
+    prompt = st.text_area(
+        "Prompt",
+        value=default_prompt,
+        placeholder="Example: A luxury jewelry product photo on a dark reflective surface, soft spotlight, premium advertisement, realistic, ultra detailed",
+        height=150,
+    )
+
+    negative_prompt = st.text_area(
+        "Negative prompt",
+        placeholder="Optional: blurry, watermark, text, extra fingers, low quality, distorted face",
+        height=90,
+    )
+
+    with st.expander("Sample prompt ideas"):
+        st.write("**Product ad:** Luxury perfume bottle on marble surface, premium ad photography, elegant lighting, realistic")
+        st.write("**Portrait:** Confident young woman in studio lighting, fashion magazine style, detailed face, realistic")
+        st.write("**Fantasy:** A magical forest with glowing lights, dreamy atmosphere, epic fantasy art, highly detailed")
+        st.write("**Thumbnail:** Dramatic cyberpunk city skyline, vibrant neon lights, cinematic, high contrast")
+
+with right:
+    model_label = st.selectbox("Model", list(MODELS.keys()))
+    model_id = MODELS[model_label]
+
+    style_options = ["Realistic", "Cinematic", "Fantasy", "Anime", "Product Photography", "Minimal"]
+    style_choice = st.selectbox("Style direction", style_options)
+
+    if st.session_state.premium_user:
+        guidance = st.slider("Guidance scale", 1.0, 20.0, 8.5, 0.5)
+        steps = st.slider("Inference steps", 10, 50, 30, 5)
+        st.markdown('<div class="success-box"><b>Premium enabled:</b> Advanced generation controls are unlocked.</div>', unsafe_allow_html=True)
     else:
-        st.caption("Your prompt preview will appear here.")
-st.markdown('</div>', unsafe_allow_html=True)
+        guidance = 7.5
+        steps = 20
+        st.markdown('<div class="info-box"><b>Free mode:</b> Premium users get stronger controls and enhanced generation settings.</div>', unsafe_allow_html=True)
 
-# ── Settings section ─────────────────────────────────────────────────────────
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Generation Settings</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="prompt-box">
+        <b>Selected model:</b> {model_label}<br>
+        <b>Style:</b> {style_choice}
+    </div>
+    """, unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
-with col1:
-    guidance = st.slider("Guidance Scale", 1.0, 20.0, 7.5, 0.5)
-with col2:
-    num_steps = st.slider("Inference Steps", 10, 50, 25, 5)
-
-st.markdown("""
-<div class="sample-box">
-Higher guidance follows your prompt more closely. Higher steps can improve quality but may take longer.
-</div>
-""", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
-
-# ── Generate section ─────────────────────────────────────────────────────────
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Generate</div>', unsafe_allow_html=True)
-
+# ── Generate logic ───────────────────────────────────────────────────────────
 generate = st.button("🎨 Generate Image")
 
 if generate:
-    if not hf_token:
-        st.error("Please enter your Hugging Face API token.")
+    if not HF_TOKEN:
+        st.error("Owner API token is missing. Add HF_TOKEN in Streamlit secrets first.")
     elif not prompt.strip():
         st.error("Please enter a prompt.")
     else:
+        final_prompt = f"{prompt}, {style_choice.lower()} style"
+
         api_url = f"https://api-inference.huggingface.co/models/{model_id}"
-        headers = {"Authorization": f"Bearer {hf_token}"}
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
         payload = {
-            "inputs": prompt,
+            "inputs": final_prompt,
             "parameters": {
                 "negative_prompt": negative_prompt or "",
                 "guidance_scale": guidance,
-                "num_inference_steps": num_steps,
+                "num_inference_steps": steps,
             }
         }
 
-        with st.spinner("Generating your image... this can take a little time on free models."):
+        with st.spinner("Generating your image... please wait a few moments."):
             try:
                 response = requests.post(api_url, headers=headers, json=payload, timeout=120)
 
                 if response.status_code == 200:
                     image = Image.open(io.BytesIO(response.content))
                     st.image(image, use_container_width=True)
-                    st.markdown('<div class="image-caption">Image generated successfully</div>', unsafe_allow_html=True)
 
                     buf = io.BytesIO()
                     image.save(buf, format="PNG")
 
                     st.download_button(
-                        label="⬇️ Download PNG",
+                        label="⬇️ Download image",
                         data=buf.getvalue(),
-                        file_name="ai_image.png",
+                        file_name="pixelmuse-ai-image.png",
                         mime="image/png",
                     )
 
                     st.session_state.history.insert(0, {
                         "time": datetime.now().strftime("%d %b %Y • %I:%M %p"),
-                        "prompt": prompt
+                        "prompt": final_prompt
                     })
 
                 elif response.status_code == 503:
-                    st.warning("Model is loading right now. Wait around 20–30 seconds and try again.")
+                    st.warning("The model is loading right now. Wait 20–30 seconds and try again.")
                 elif response.status_code == 401:
-                    st.error("Invalid Hugging Face token. Please check it and try again.")
+                    st.error("The hidden API token is invalid. Update HF_TOKEN in Streamlit secrets.")
                 else:
                     st.error(f"API Error {response.status_code}: {response.text[:300]}")
 
             except requests.exceptions.Timeout:
-                st.error("Request timed out. The model may be busy. Please try again.")
+                st.error("Request timed out. Please try again.")
             except Exception as e:
                 st.error(f"Unexpected error: {e}")
 
-st.markdown('</div>', unsafe_allow_html=True)
-
-# ── Recent history section ───────────────────────────────────────────────────
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Recent Prompt History</div>', unsafe_allow_html=True)
+# ── History ──────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="section-card">
+    <div class="section-title">Recent generations</div>
+    <div class="section-sub">Show users that the platform is active and useful.</div>
+</div>
+""", unsafe_allow_html=True)
 
 if st.session_state.history:
-    for item in st.session_state.history[:3]:
+    for item in st.session_state.history[:4]:
         st.markdown(
-            f'<div class="history-item"><b>{item["time"]}</b><br>{item["prompt"]}</div>',
+            f'<div class="history-card"><b>{item["time"]}</b><br>{item["prompt"]}</div>',
             unsafe_allow_html=True
         )
 else:
-    st.markdown('<div class="sample-box">Your generated prompt history will appear here.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="prompt-box">Generated prompt history will appear here after image generation.</div>', unsafe_allow_html=True)
 
-st.markdown('</div>', unsafe_allow_html=True)
+# ── CTA ──────────────────────────────────────────────────────────────────────
+cta1, cta2 = st.columns(2)
 
-# ── Premium section ──────────────────────────────────────────────────────────
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Upgrade Option</div>', unsafe_allow_html=True)
+with cta1:
+    st.link_button("💎 Upgrade to Premium", PREMIUM_LINK)
 
-st.markdown("""
-<div class="premium-grid">
-    <div class="price-card">
-        <div class="price-title">Free</div>
-        <div class="price-sub">Great for testing</div>
-        <div class="price-list">
-            • Use your own Hugging Face token<br>
-            • Access free models<br>
-            • Generate and download images<br>
-            • Basic usage
-        </div>
-    </div>
-    <div class="price-card">
-        <div class="price-title">Premium</div>
-        <div class="price-sub">For creators and sellers</div>
-        <div class="price-list">
-            • Faster generation<br>
-            • Premium prompt packs<br>
-            • Advanced styles and templates<br>
-            • Creator tools for social media
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-st.link_button("🔥 Buy Premium Prompts", "https://gumroad.com/")
-st.markdown('</div>', unsafe_allow_html=True)
+with cta2:
+    st.button("🚀 Start Creating")
 
 # ── Footer ───────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="footer-note">
-Built with Streamlit + Hugging Face Inference API • Free starter version
+st.markdown(f"""
+<div class="footer">
+    © 2026 {APP_NAME} • Professional AI image generation platform • Built with Streamlit
 </div>
 """, unsafe_allow_html=True)
-
-st.markdown('</div>', unsafe_allow_html=True)
