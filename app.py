@@ -1,5 +1,5 @@
 import streamlit as st
-import ANTHROPIC_API_KEY
+import anthropic_api_key
 import hashlib
 import random
 import string
