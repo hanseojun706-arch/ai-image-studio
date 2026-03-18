@@ -6,29 +6,31 @@ import datetime
 from datetime import datetime as dt
 
 # =========================================================
-# APP CONFIG — EDIT THESE
+# CONFIG
 # =========================================================
 APP_NAME = "AI Image Studio"
 APP_TAGLINE = "Create stunning AI images in seconds for social media, ads, thumbnails, and creative projects."
-PREMIUM_LINK = "https://your-payment-link.com"   # Replace later
 FREE_DAILY_LIMIT = 1
+PREMIUM_LINK = "https://aiimagestudio.gumroad.com/l/yrpblj"
 
-# Token from Streamlit Secrets
-# In Streamlit Secrets, add:
+# Add your token in Streamlit Secrets:
 # HF_TOKEN = "hf_your_token_here"
 HF_TOKEN = st.secrets.get("HF_TOKEN", "")
 
-# =========================================================
-# PAGE SETUP
-# =========================================================
-st.set_page_config(
-    page_title=APP_NAME,
-    page_icon="🎨",
-    layout="wide",
-)
+# Premium codes
+VALID_PREMIUM_CODES = {
+    "AISTUDIO2026",
+    "PREMIUMIMAGE1",
+    "IMAGEPRO2026",
+}
 
 # =========================================================
-# DAILY LIMIT SYSTEM
+# PAGE
+# =========================================================
+st.set_page_config(page_title=APP_NAME, page_icon="🎨", layout="wide")
+
+# =========================================================
+# DAILY LIMIT + SESSION
 # =========================================================
 today = str(datetime.date.today())
 
@@ -41,31 +43,27 @@ if st.session_state.usage["date"] != today:
 if "history" not in st.session_state:
     st.session_state.history = []
 
+if "premium_unlocked" not in st.session_state:
+    st.session_state.premium_unlocked = False
+
+if "used_code" not in st.session_state:
+    st.session_state.used_code = ""
+
 # =========================================================
 # MODELS
 # =========================================================
-MODELS = {
-    "Stable Diffusion XL - Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
-    "FLUX.1-schnell - Ultra fast": "black-forest-labs/FLUX.1-schnell",
-    "Dreamlike Photoreal - Realistic photos": "dreamlike-art/dreamlike-photoreal-2.0",
+FREE_MODELS = {
+    "Stable Diffusion XL": "stabilityai/stable-diffusion-xl-base-1.0",
+}
+
+PREMIUM_MODELS = {
+    "Stable Diffusion XL": "stabilityai/stable-diffusion-xl-base-1.0",
+    "FLUX Fast": "black-forest-labs/FLUX.1-schnell",
+    "Dreamlike Photoreal": "dreamlike-art/dreamlike-photoreal-2.0",
 }
 
 # =========================================================
-# PRESETS
-# =========================================================
-PROMPT_PRESETS = {
-    "None": "",
-    "Cinematic City": "A futuristic city street at night, neon reflections, rainy atmosphere, cinematic lighting, ultra detailed, 8k",
-    "Fantasy Forest": "A magical forest with glowing mushrooms, floating lights, fantasy art, dreamy, highly detailed",
-    "Luxury Product": "Luxury perfume bottle on marble surface, premium ad photography, soft shadows, realistic, ultra detailed",
-    "Fashion Portrait": "Elegant woman in studio lighting, high fashion photography, realistic skin texture, detailed face",
-    "Village Sunrise": "A peaceful mountain village at sunrise, soft golden light, cinematic atmosphere, realistic, ultra detailed",
-    "Anime Scene": "A beautiful anime-style scene under cherry blossoms, soft lighting, vibrant colors, dreamy composition",
-    "Food Photography": "A premium dessert on a restaurant table, soft light, bokeh background, realistic food photography",
-}
-
-# =========================================================
-# CUSTOM CSS
+# CSS
 # =========================================================
 st.markdown("""
 <style>
@@ -261,6 +259,17 @@ h1, h2, h3, h4 {
     margin-top: 0.8rem;
 }
 
+.premium-box {
+    background: rgba(36, 20, 52, 0.82);
+    border: 1px solid rgba(196,181,253,0.25);
+    border-left: 4px solid #a855f7;
+    border-radius: 14px;
+    padding: 1rem;
+    color: #e9d5ff;
+    font-size: 0.92rem;
+    margin-top: 0.8rem;
+}
+
 .prompt-box {
     background: rgba(15,23,42,0.7);
     border: 1px dashed rgba(255,255,255,0.12);
@@ -334,15 +343,25 @@ with st.sidebar:
     st.title("🎛️ Studio Panel")
     st.caption("AI image generation for creators and businesses")
 
-    free_left = max(FREE_DAILY_LIMIT - st.session_state.usage["count"], 0)
-    st.markdown(f"**Free images left today:** {free_left}")
+    free_left = "Unlimited" if st.session_state.premium_unlocked else max(FREE_DAILY_LIMIT - st.session_state.usage["count"], 0)
+    st.markdown(f"**Images left today:** {free_left}")
 
     preset_choice = st.selectbox("Quick prompt preset", list(PROMPT_PRESETS.keys()))
 
     st.markdown("---")
-    st.subheader("Upgrade")
-    st.write("Unlock more generation power and premium features.")
+    st.subheader("Premium access")
     st.link_button("💎 Buy Premium", PREMIUM_LINK)
+
+    premium_input = st.text_input("Enter premium code", type="password")
+
+    if st.button("Unlock Premium"):
+        code_value = premium_input.strip()
+        if code_value in VALID_PREMIUM_CODES:
+            st.session_state.premium_unlocked = True
+            st.session_state.used_code = code_value
+            st.success("Premium unlocked successfully.")
+        else:
+            st.error("Invalid premium code.")
 
     st.markdown("---")
     st.subheader("Recent prompts")
@@ -434,15 +453,32 @@ with col_pricing:
             </div>
             <div class="price-card premium">
                 <div class="price-name">Premium</div>
-                <div class="price-amount">$9/mo</div>
+                <div class="price-amount">Code Access</div>
                 <div class="price-list">
-                    • More daily images<br>
+                    • Unlimited daily images<br>
                     • Better models<br>
                     • Faster workflow<br>
-                    • Premium features
+                    • Premium access
                 </div>
             </div>
         </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# =========================================================
+# PREMIUM STATUS
+# =========================================================
+if st.session_state.premium_unlocked:
+    st.markdown(f"""
+    <div class="premium-box">
+        <b>Premium active:</b> Unlimited access enabled in this session.<br>
+        <b>Code used:</b> {st.session_state.used_code}
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div class="warning-box">
+        <b>Free users:</b> Only 1 image per day is allowed. Buy premium on Gumroad and enter your premium code in the sidebar.
     </div>
     """, unsafe_allow_html=True)
 
@@ -481,20 +517,27 @@ with left:
         st.write("**Thumbnail:** Cyberpunk city skyline, dramatic lighting, vibrant neon colors")
 
 with right:
-    model_label = st.selectbox("Model", list(MODELS.keys()))
-    model_id = MODELS[model_label]
+    model_source = PREMIUM_MODELS if st.session_state.premium_unlocked else FREE_MODELS
+    model_label = st.selectbox("Model", list(model_source.keys()))
+    model_id = model_source[model_label]
 
     style_choice = st.selectbox(
         "Style direction",
         ["Realistic", "Cinematic", "Fantasy", "Anime", "Product Photography", "Minimal"]
     )
 
-    st.markdown("""
-    <div class="info-box">
-        <b>Free mode:</b> visitors can generate only 1 image per day.
-        Upgrade users can continue with premium access.
-    </div>
-    """, unsafe_allow_html=True)
+    if st.session_state.premium_unlocked:
+        st.markdown("""
+        <div class="premium-box">
+            <b>Premium mode:</b> Better model access unlocked.
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="info-box">
+            <b>Free mode:</b> Limited access with 1 image per day.
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="prompt-box">
@@ -504,7 +547,7 @@ with right:
     """, unsafe_allow_html=True)
 
 # =========================================================
-# GENERATE LOGIC
+# GENERATE
 # =========================================================
 generate = st.button("🎨 Generate Image")
 
@@ -515,14 +558,14 @@ if generate:
     elif not prompt.strip():
         st.error("Please enter a prompt.")
 
-    elif st.session_state.usage["count"] >= FREE_DAILY_LIMIT:
+    elif (not st.session_state.premium_unlocked) and st.session_state.usage["count"] >= FREE_DAILY_LIMIT:
         st.markdown("""
         <div class="warning-box">
             <b>Free limit reached!</b><br><br>
-            Unlock premium to continue generating more images with faster access and better experience.
+            Buy premium from Gumroad, then enter your premium code in the sidebar to continue with unlimited access.
         </div>
         """, unsafe_allow_html=True)
-        st.link_button("💎 Upgrade to Premium", PREMIUM_LINK)
+        st.link_button("💎 Buy Premium", PREMIUM_LINK)
 
     else:
         final_prompt = f"{prompt}, {style_choice.lower()} style"
@@ -556,7 +599,9 @@ if generate:
                         mime="image/png",
                     )
 
-                    st.session_state.usage["count"] += 1
+                    if not st.session_state.premium_unlocked:
+                        st.session_state.usage["count"] += 1
+
                     st.session_state.history.insert(0, {
                         "time": dt.now().strftime("%d %b %Y • %I:%M %p"),
                         "prompt": final_prompt
@@ -600,21 +645,10 @@ else:
     st.markdown('<div class="prompt-box">No generated history yet.</div>', unsafe_allow_html=True)
 
 # =========================================================
-# CTA
-# =========================================================
-cta1, cta2 = st.columns(2)
-
-with cta1:
-    st.link_button("💎 Upgrade to Premium", PREMIUM_LINK)
-
-with cta2:
-    st.button("🚀 Start Creating")
-
-# =========================================================
 # FOOTER
 # =========================================================
 st.markdown("""
 <div class="footer">
     © 2026 AI Image Studio - Professional AI image generation platform
 </div>
-""", unsafe_allow_html=True)
+""", unsafe_allow_html=
