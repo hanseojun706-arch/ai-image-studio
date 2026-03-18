@@ -4,63 +4,59 @@ from PIL import Image
 import io
 from datetime import datetime
 
-# ── PAGE CONFIG ──────────────────────────────────────────────────────────────
+# =========================================================
+# APP CONFIG — EDIT THESE
+# =========================================================
+APP_NAME = "AI Image Studio"
+APP_TAGLINE = "Create stunning AI images in seconds for social media, ads, and creative projects."
+PREMIUM_LINK = "https://your-payment-link.com"  # Replace later
+FREE_DAILY_LIMIT = 3
+
+# Hugging Face token from Streamlit Secrets
+# Add in Streamlit Secrets:
+# HF_TOKEN = "hf_your_token_here"
+HF_TOKEN = st.secrets.get("HF_TOKEN", "")
+
+# =========================================================
+# PAGE CONFIG
+# =========================================================
 st.set_page_config(
-    page_title="AI IMAGE STUDIO",
+    page_title=APP_NAME,
     page_icon="🎨",
     layout="wide",
 )
 
-# ── EDIT THESE VALUES ────────────────────────────────────────────────────────
-APP_NAME = "AI IMAGE STUDIO"
-APP_TAGLINE = "Create stunning AI-generated images in seconds"
-
-"Generate high - quality images for social media, ads, thumbnails, and creative projects - all in seconds using AI."
-
-features = [
-    "AI Art Generator",
-    "Fast Results",
-    "Social Media Ready",
-    "Instant Download"
-]
-PREMIUM_LINK = "https://your-payment-link.com"   # EDIT THIS
-FREE_DAILY_LIMIT = 3                              # EDIT THIS if you want
-SHOW_WATERMARK_NOTE = True                        # True or False
-
-# ── SESSION STATE ────────────────────────────────────────────────────────────
-if "history" not in st.session_state:
-    st.session_state.history = []
-
+# =========================================================
+# SESSION STATE
+# =========================================================
 if "generation_count" not in st.session_state:
     st.session_state.generation_count = 0
 
-# ── SECRET TOKEN ─────────────────────────────────────────────────────────────
-# Add this in Streamlit Secrets:
-# HF_TOKEN = "your_huggingface_token_here"
-HF_TOKEN = st.secrets.get("HF_TOKEN", "")
+if "history" not in st.session_state:
+    st.session_state.history = []
 
-# ── MODELS ───────────────────────────────────────────────────────────────────
-FREE_MODELS = {
-    "Stable Diffusion XL — Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
-}
-
-PREMIUM_MODELS = {
-    "Stable Diffusion XL — Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
-    "FLUX.1-schnell — Ultra fast": "black-forest-labs/FLUX.1-schnell",
-    "Dreamlike Photoreal — Realistic photos": "dreamlike-art/dreamlike-photoreal-2.0",
+# =========================================================
+# MODELS AND PRESETS
+# =========================================================
+MODELS = {
+    "Stable Diffusion XL - Fast and detailed": "stabilityai/stable-diffusion-xl-base-1.0",
+    "FLUX.1-schnell - Ultra fast": "black-forest-labs/FLUX.1-schnell",
+    "Dreamlike Photoreal - Realistic photos": "dreamlike-art/dreamlike-photoreal-2.0",
 }
 
 PROMPT_PRESETS = {
     "None": "",
     "Cinematic City": "A futuristic city street at night, neon reflections, rainy atmosphere, cinematic lighting, ultra detailed, 8k",
     "Fantasy Forest": "A magical forest with glowing mushrooms, floating lights, fantasy art, dreamy, highly detailed",
-    "Luxury Product": "Luxury perfume bottle on a marble surface, soft shadows, premium ad photography, elegant composition, realistic",
-    "Fashion Portrait": "Elegant woman in royal blue dress, studio lighting, high fashion photography, detailed face, realistic skin texture",
-    "Village Sunrise": "A dreamy mountain village at sunrise, soft golden light, cinematic atmosphere, ultra detailed, realistic, 8k",
-    "Anime Scene": "A beautiful anime-style girl standing under cherry blossoms, soft lighting, vibrant colors, dreamy composition",
+    "Luxury Product": "Luxury perfume bottle on marble surface, premium ad photography, soft shadows, realistic",
+    "Fashion Portrait": "Elegant woman in studio lighting, high fashion photography, realistic, detailed face",
+    "Village Sunrise": "A peaceful mountain village at sunrise, soft golden light, cinematic atmosphere, realistic, ultra detailed",
+    "Anime Scene": "A beautiful anime-style scene with cherry blossoms, soft lighting, vibrant colors, dreamy composition",
 }
 
-# ── CUSTOM CSS ───────────────────────────────────────────────────────────────
+# =========================================================
+# CUSTOM CSS
+# =========================================================
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
@@ -81,18 +77,18 @@ h1, h2, h3, h4 {
 }
 
 .block-container {
+    max-width: 1250px;
     padding-top: 1.5rem;
     padding-bottom: 2rem;
-    max-width: 1250px;
 }
 
 .hero {
     padding: 2.5rem 2rem;
     border-radius: 28px;
     background:
-        radial-gradient(circle at top left, rgba(124,58,237,0.30), transparent 35%),
+        radial-gradient(circle at top left, rgba(124,58,237,0.28), transparent 35%),
         radial-gradient(circle at top right, rgba(59,130,246,0.25), transparent 32%),
-        linear-gradient(135deg, rgba(15,23,42,0.95), rgba(17,24,39,0.92));
+        linear-gradient(135deg, rgba(15,23,42,0.96), rgba(17,24,39,0.93));
     border: 1px solid rgba(255,255,255,0.08);
     box-shadow: 0 15px 50px rgba(0,0,0,0.28);
     margin-bottom: 1rem;
@@ -310,18 +306,21 @@ div.stButton > button {
 </style>
 """, unsafe_allow_html=True)
 
-# ── SIDEBAR ──────────────────────────────────────────────────────────────────
+# =========================================================
+# SIDEBAR
+# =========================================================
 with st.sidebar:
     st.title("🎛️ Studio Panel")
     st.caption("AI image generation for creators and businesses")
 
-    st.markdown(f"**Free images left:** {max(FREE_DAILY_LIMIT - st.session_state.generation_count, 0)}")
+    free_left = max(FREE_DAILY_LIMIT - st.session_state.generation_count, 0)
+    st.markdown(f"**Free images left:** {free_left}")
 
     preset_choice = st.selectbox("Quick prompt preset", list(PROMPT_PRESETS.keys()))
 
     st.markdown("---")
     st.subheader("Upgrade")
-    st.write("Unlock more generation power and premium features.")
+    st.write("Unlock more power and premium features.")
     st.link_button("💎 Buy Premium", PREMIUM_LINK)
 
     st.markdown("---")
@@ -334,25 +333,27 @@ with st.sidebar:
     else:
         st.caption("No prompts yet.")
 
-# ── HERO ─────────────────────────────────────────────────────────────────────
+# =========================================================
+# HERO
+# =========================================================
 st.markdown(f"""
 <div class="hero">
     <div class="hero-title">{APP_NAME}</div>
     <div class="hero-sub">
-        {APP_TAGLINE}. Generate beautiful images for social media, products, ads,
-        thumbnails, posters, and personal projects with a premium-looking AI platform.
+        {APP_TAGLINE}
     </div>
     <div class="badges">
-        <span class="badge">🎨 Text to Image</span>
+        <span class="badge">🎨 AI Art Generator</span>
         <span class="badge">⚡ Fast Results</span>
-        <span class="badge">💼 Creator Friendly</span>
-        <span class="badge">💎 Premium Plans</span>
+        <span class="badge">📱 Social Media Ready</span>
         <span class="badge">⬇️ Instant Download</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── FEATURES ─────────────────────────────────────────────────────────────────
+# =========================================================
+# FEATURES
+# =========================================================
 st.markdown("""
 <div class="section-card">
     <div class="section-title">Powerful features</div>
@@ -363,8 +364,8 @@ st.markdown("""
             <div class="feature-text">Turn simple words into cinematic scenes, portraits, product shots, and creative visuals.</div>
         </div>
         <div class="feature-card">
-            <div class="feature-title">Free & premium access</div>
-            <div class="feature-text">Offer standard generation for visitors and upgrade options for users who need more power.</div>
+            <div class="feature-title">Fast and easy workflow</div>
+            <div class="feature-text">Generate high-quality images quickly with a clean and simple interface designed for everyone.</div>
         </div>
         <div class="feature-card">
             <div class="feature-title">Business-ready layout</div>
@@ -374,7 +375,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── ABOUT + PRICING ──────────────────────────────────────────────────────────
+# =========================================================
+# ABOUT + PRICING
+# =========================================================
 col_about, col_pricing = st.columns([1.2, 1])
 
 with col_about:
@@ -383,7 +386,7 @@ with col_about:
         <div class="section-title">About us</div>
         <div class="section-sub">A polished AI product page for your visitors.</div>
         <div class="about-box">
-            <b>PixelMuse AI</b> helps people create beautiful AI-generated images quickly and easily.
+            <b>AI Image Studio</b> helps people create beautiful AI-generated images quickly and easily.
             This platform is designed for creators, students, marketers, business owners, and anyone
             who needs high-quality visuals without a complicated workflow.
             <br><br>
@@ -422,7 +425,9 @@ with col_pricing:
     </div>
     """, unsafe_allow_html=True)
 
-# ── GENERATOR ────────────────────────────────────────────────────────────────
+# =========================================================
+# GENERATOR
+# =========================================================
 st.markdown("""
 <div class="section-card">
     <div class="section-title">AI image generator</div>
@@ -455,10 +460,8 @@ with left:
         st.write("**Thumbnail:** Cyberpunk city skyline, dramatic lighting, vibrant neon colors")
 
 with right:
-    # free users get only free models
-    model_source = FREE_MODELS
-    model_label = st.selectbox("Model", list(model_source.keys()))
-    model_id = model_source[model_label]
+    model_label = st.selectbox("Model", list(MODELS.keys()))
+    model_id = MODELS[model_label]
 
     style_choice = st.selectbox(
         "Style direction",
@@ -479,7 +482,9 @@ with right:
     </div>
     """, unsafe_allow_html=True)
 
-# ── GENERATE LOGIC ───────────────────────────────────────────────────────────
+# =========================================================
+# GENERATE LOGIC
+# =========================================================
 generate = st.button("🎨 Generate Image")
 
 if generate:
@@ -512,16 +517,13 @@ if generate:
                     image = Image.open(io.BytesIO(response.content))
                     st.image(image, use_container_width=True)
 
-                    if SHOW_WATERMARK_NOTE:
-                        st.caption("Free version image generated successfully.")
-
                     buf = io.BytesIO()
                     image.save(buf, format="PNG")
 
                     st.download_button(
                         label="⬇️ Download image",
                         data=buf.getvalue(),
-                        file_name="pixelmuse-ai-image.png",
+                        file_name="ai-image-studio.png",
                         mime="image/png",
                     )
 
@@ -530,6 +532,12 @@ if generate:
                         "time": datetime.now().strftime("%d %b %Y • %I:%M %p"),
                         "prompt": final_prompt
                     })
+
+                    st.markdown("""
+                    <div class="success-box">
+                        <b>Success:</b> Your image was generated successfully.
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 elif response.status_code == 503:
                     st.warning("The model is loading. Wait 20–30 seconds and try again.")
@@ -543,7 +551,9 @@ if generate:
             except Exception as e:
                 st.error(f"Unexpected error: {e}")
 
-# ── HISTORY ──────────────────────────────────────────────────────────────────
+# =========================================================
+# HISTORY
+# =========================================================
 st.markdown("""
 <div class="section-card">
     <div class="section-title">Recent generations</div>
@@ -560,16 +570,22 @@ if st.session_state.history:
 else:
     st.markdown('<div class="prompt-box">No generated history yet.</div>', unsafe_allow_html=True)
 
-# ── CTA ──────────────────────────────────────────────────────────────────────
+# =========================================================
+# CTA
+# =========================================================
 cta1, cta2 = st.columns(2)
+
 with cta1:
     st.link_button("💎 Upgrade to Premium", PREMIUM_LINK)
+
 with cta2:
     st.button("🚀 Start Creating")
 
-# ── FOOTER ───────────────────────────────────────────────────────────────────
-st.markdown(f"""
+# =========================================================
+# FOOTER
+# =========================================================
+st.markdown("""
 <div class="footer">
-    © 2026 {AI IMAGE STUDIO} • Professional AI image generation platform
+    © 2026 AI Image Studio - Professional AI image generation platform
 </div>
 """, unsafe_allow_html=True)
