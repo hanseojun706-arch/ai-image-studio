@@ -293,3 +293,4 @@ with f2:
     <div class="feature-box">
         <div class="feature-head">Fast workflow</div>
         <div class="feature-text">
+        """, unsafe_allow_html=True)
