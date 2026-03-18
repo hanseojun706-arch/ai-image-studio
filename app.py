@@ -651,4 +651,4 @@ st.markdown("""
 <div class="footer">
     © 2026 AI Image Studio - Professional AI image generation platform
 </div>
-""", unsafe_allow_html=
+""", unsafe_allow_html=True)
