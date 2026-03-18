@@ -17,9 +17,9 @@ APP_TAGLINE = "Create stunning AI-generated images in seconds"
 
 "Generate high - quality images for social media, ads, thumbnails, and creative projects - all in seconds using AI."
 
-[ AI Art Generator ] [ Fast Results ] [ Social Media Ready ] [ Instant Download ]
+[ AI Art Generator ], [ Fast Results ], [ Social Media Ready ], [ Instant Download ],
 
-[ Start Creating ]   [ Upgrade to Premium ]
+[ Start Creating ],   [ Upgrade to Premium ]
 PREMIUM_LINK = "https://your-payment-link.com"   # EDIT THIS
 FREE_DAILY_LIMIT = 3                              # EDIT THIS if you want
 SHOW_WATERMARK_NOTE = True                        # True or False
