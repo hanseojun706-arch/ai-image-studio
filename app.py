@@ -6,7 +6,7 @@ from datetime import datetime
 
 # ── PAGE CONFIG ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="PixelMuse AI",
+    page_title="AI IMAGE STUDIO",
     page_icon="🎨",
     layout="wide",
 )
@@ -14,9 +14,8 @@ st.set_page_config(
 # ── EDIT THESE VALUES ────────────────────────────────────────────────────────
 APP_NAME = "AI IMAGE STUDIO"
 APP_TAGLINE = "Create stunning AI-generated images in seconds"
-"Create stunning AI images in seconds"
 
-"Generate high-quality images for social media, ads, thumbnails, and creative projects - all in seconds using AI."
+ "Generate high - quality images for social media, ads, thumbnails, and creative projects - all in seconds using AI."
 
 [ AI Art Generator ] [ Fast Results ] [ Social Media Ready ] [ Instant Download ]
 
@@ -568,6 +567,6 @@ with cta2:
 # ── FOOTER ───────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="footer">
-    © 2026 {APP_NAME} • Professional AI image generation platform
+    © 2026 {AI IMAGE STUDIO} • Professional AI image generation platform
 </div>
 """, unsafe_allow_html=True)
