@@ -1,569 +1,594 @@
-import streamlit as st
-import hashlib
-import random
-import string
-import time
+import os
 import io
-import datetime
+import re
+import sqlite3
+import hashlib
+import secrets
+from datetime import datetime
+
+import requests
+import streamlit as st
 from PIL import Image
 from huggingface_hub import InferenceClient
 
-# ─────────────────────────────────────────────
+# =========================================================
 # PAGE CONFIG
-# ─────────────────────────────────────────────
+# =========================================================
 st.set_page_config(
     page_title="AI Image Studio",
     page_icon="✨",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# ─────────────────────────────────────────────
-# CUSTOM CSS – dark luxury aesthetic
-# ─────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
-
-:root {
-  --gold:   #e8c97a;
-  --gold2:  #f5dfa0;
-  --dark:   #0a0a0f;
-  --card:   #13131c;
-  --border: rgba(232,201,122,0.18);
-  --text:   #e8e4d8;
-  --muted:  #7a7870;
-}
-
-html, body, [class*="css"] {
-  font-family: 'DM Sans', sans-serif;
-  background: var(--dark);
-  color: var(--text);
-}
-
-.stApp {
-  background: var(--dark);
-}
-
-.block-container {
-  padding-top: 1rem !important;
-  max-width: 1100px;
-}
-
-.hero {
-  text-align: center;
-  padding: 3.5rem 1rem 2rem;
-}
-.hero-badge {
-  display: inline-block;
-  background: linear-gradient(90deg,#e8c97a22,#e8c97a44);
-  border: 1px solid var(--gold);
-  color: var(--gold);
-  font-family: 'Syne', sans-serif;
-  font-size: 0.72rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  padding: 0.3rem 1rem;
-  border-radius: 999px;
-  margin-bottom: 1.2rem;
-}
-.hero h1 {
-  font-family: 'Syne', sans-serif;
-  font-size: clamp(2.4rem, 5vw, 4rem);
-  font-weight: 800;
-  background: linear-gradient(135deg, #f5dfa0 0%, #e8c97a 40%, #c9973a 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  line-height: 1.1;
-  margin: 0;
-}
-.hero p {
-  color: var(--muted);
-  font-size: 1.05rem;
-  margin-top: 0.8rem;
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 1.6rem;
-  margin-bottom: 1.2rem;
-}
-.card-title {
-  font-family: 'Syne', sans-serif;
-  font-size: 0.8rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 0.8rem;
-}
-.premium-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: linear-gradient(90deg,#e8c97a,#c9973a);
-  color: #0a0a0f;
-  font-family: 'Syne', sans-serif;
-  font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.1em;
-  padding: 0.3rem 0.9rem;
-  border-radius: 999px;
-}
-.free-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: var(--muted);
-  font-family: 'Syne', sans-serif;
-  font-size: 0.78rem;
-  padding: 0.3rem 0.9rem;
-  border-radius: 999px;
-}
-.gumroad-btn {
-  display: block;
-  width: 100%;
-  text-align: center;
-  background: linear-gradient(135deg,#e8c97a,#c9973a);
-  color: #0a0a0f !important;
-  font-family: 'Syne', sans-serif;
-  font-weight: 700;
-  font-size: 1rem;
-  letter-spacing: 0.04em;
-  text-decoration: none !important;
-  padding: 0.95rem 2rem;
-  border-radius: 12px;
-  margin: 0.4rem 0;
-}
-.stat-strip {
-  display: flex;
-  gap: 1px;
-  background: var(--border);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 1.4rem;
-}
-.stat-item {
-  flex: 1;
-  background: var(--card);
-  padding: 1rem;
-  text-align: center;
-}
-.stat-num {
-  font-family: 'Syne', sans-serif;
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--gold);
-}
-.stat-label {
-  font-size: 0.74rem;
-  color: var(--muted);
-  margin-top: 0.2rem;
-}
-
-.limit-bar-bg {
-  height: 6px;
-  background: rgba(255,255,255,0.08);
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 0.5rem;
-}
-.limit-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg,#e8c97a,#c9973a);
-}
-
-.stTextInput > div > div > input,
-.stTextArea > div > div > textarea,
-.stSelectbox > div > div {
-  background: #1a1a26 !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 10px !important;
-  color: var(--text) !important;
-}
-
-.stButton > button {
-  background: linear-gradient(135deg,#e8c97a,#c9973a) !important;
-  color: #0a0a0f !important;
-  font-family: 'Syne', sans-serif !important;
-  font-weight: 700 !important;
-  border: none !important;
-  border-radius: 10px !important;
-  letter-spacing: 0.04em !important;
-}
-
-div[data-testid="stExpander"] {
-  background: var(--card);
-  border: 1px solid var(--border) !important;
-  border-radius: 12px;
-}
-
-#MainMenu, footer, header {
-  visibility: hidden;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────
-# CONSTANTS & STATE INIT
-# ─────────────────────────────────────────────
-FREE_LIMIT = 1
+# =========================================================
+# SETTINGS
+# =========================================================
+APP_TITLE = "AI Image Studio"
 GUMROAD_URL = "https://aiimagestudio.gumroad.com/l/yrpblj"
 
-try:
-    HF_TOKEN = st.secrets["HF_TOKEN"]
-except Exception:
-    HF_TOKEN = ""
+# Put these in Streamlit secrets or environment variables
+HF_TOKEN = st.secrets.get("HF_TOKEN", os.getenv("HF_TOKEN", ""))
+HF_MODEL = st.secrets.get(
+    "HF_MODEL",
+    os.getenv("HF_MODEL", "black-forest-labs/FLUX.1-schnell")
+)
 
-MODEL_OPTIONS = {
-    "Premium XL": "black-forest-labs/FLUX.1-Krea-dev",
-    "Fast FLUX": "black-forest-labs/FLUX.1-schnell",
-    "Qwen Image": "Qwen/Qwen-Image",
-}
+GUMROAD_PRODUCT_ID = st.secrets.get(
+    "GUMROAD_PRODUCT_ID",
+    os.getenv("GUMROAD_PRODUCT_ID", "")
+)
 
-STYLE_HINTS = {
-    "Photorealistic": "ultra realistic, detailed lighting, natural textures, professional photography",
-    "Cinematic": "cinematic lighting, dramatic atmosphere, film still, moody composition",
-    "Oil Painting": "oil painting, rich brushstrokes, gallery artwork, classical details",
-    "Watercolour": "watercolour painting, soft edges, pastel blending, elegant wash",
-    "Anime / Manga": "anime style, vibrant colors, clean line art, expressive composition",
-    "Pixel Art": "pixel art, retro game style, crisp pixels, stylized shading",
-    "Concept Art": "concept art, highly detailed, environmental design, polished composition",
-    "Sketch": "pencil sketch, hand drawn, fine detail, artistic shading",
-    "Surrealist": "surreal dreamlike imagery, unexpected composition, imaginative visuals",
-    "Minimalist": "minimalist design, clean composition, elegant simplicity",
-}
+ADMIN_PASSWORD = st.secrets.get(
+    "ADMIN_PASSWORD",
+    os.getenv("ADMIN_PASSWORD", "")
+)
 
-for key, default in [
-    ("premium_codes", {}),
-    ("is_premium", False),
-    ("free_uses", 0),
-    ("generated_images", []),
-    ("activated_code", None),
-    ("show_unlock", False),
-]:
-    if key not in st.session_state:
-        st.session_state[key] = default
+FREE_LIMIT = 1
+DB_PATH = "ai_image_studio.db"
 
-# ─────────────────────────────────────────────
+# =========================================================
+# STYLES
+# =========================================================
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #0b1020 0%, #111827 40%, #1f2937 100%);
+        color: #ffffff;
+    }
+
+    .hero-box {
+        padding: 28px;
+        border-radius: 24px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        margin-bottom: 20px;
+    }
+
+    .card {
+        padding: 20px;
+        border-radius: 22px;
+        background: rgba(255,255,255,0.07);
+        border: 1px solid rgba(255,255,255,0.10);
+        margin-bottom: 14px;
+    }
+
+    .big-title {
+        font-size: 3rem;
+        font-weight: 800;
+        line-height: 1.05;
+        margin-bottom: 8px;
+        color: #ffffff;
+    }
+
+    .subtext {
+        font-size: 1rem;
+        color: #d1d5db;
+        margin-bottom: 10px;
+    }
+
+    .pill {
+        display: inline-block;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #7c3aed, #ec4899);
+        color: white;
+        font-size: 0.9rem;
+        font-weight: 700;
+        margin-right: 8px;
+        margin-top: 8px;
+    }
+
+    .small-note {
+        color: #cbd5e1;
+        font-size: 0.92rem;
+    }
+
+    .success-box {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(16, 185, 129, 0.15);
+        border: 1px solid rgba(16, 185, 129, 0.35);
+        margin-top: 10px;
+    }
+
+    .warning-box {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(245, 158, 11, 0.15);
+        border: 1px solid rgba(245, 158, 11, 0.35);
+        margin-top: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# =========================================================
+# DATABASE
+# =========================================================
+def get_conn():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_hash TEXT UNIQUE,
+            email_plain TEXT,
+            generations_used INTEGER DEFAULT 0,
+            is_premium INTEGER DEFAULT 0,
+            premium_source TEXT,
+            premium_since TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS premium_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE,
+            created_at TEXT,
+            created_by TEXT,
+            redeemed INTEGER DEFAULT 0,
+            redeemed_at TEXT,
+            redeemed_by_email_hash TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# =========================================================
 # HELPERS
-# ─────────────────────────────────────────────
-def get_user_id() -> str:
-    if "user_id" not in st.session_state:
-        st.session_state.user_id = hashlib.md5(
-            str(time.time() + random.random()).encode()
-        ).hexdigest()[:12]
-    return st.session_state.user_id
+# =========================================================
+def normalize_email(email: str) -> str:
+    return (email or "").strip().lower()
 
+def is_valid_email(email: str) -> bool:
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or ""))
 
-def generate_unique_code() -> str:
-    chars = string.ascii_uppercase + string.digits
-    raw = "".join(random.choices(chars, k=16))
-    h = hashlib.sha256((raw + str(time.time())).encode()).hexdigest()[:6].upper()
-    return f"AIS-{raw[:4]}-{raw[4:8]}-{h}"
+def hash_email(email: str) -> str:
+    return hashlib.sha256(normalize_email(email).encode()).hexdigest()
 
+def get_user(email: str):
+    email = normalize_email(email)
+    email_hash = hash_email(email)
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE email_hash = ?", (email_hash,))
+    row = cur.fetchone()
+    conn.close()
+    return row
 
-def register_new_code() -> str:
-    for _ in range(10):
-        code = generate_unique_code()
-        if code not in st.session_state.premium_codes:
-            st.session_state.premium_codes[code] = {"used": False, "activated_by": None}
-            return code
-    raise RuntimeError("Code generation failed")
+def ensure_user(email: str):
+    email = normalize_email(email)
+    email_hash = hash_email(email)
 
+    conn = get_conn()
+    cur = conn.cursor()
 
-def verify_and_activate(code: str, user_id: str) -> dict:
-    code = code.strip().upper()
-    if not code:
-        return {"ok": False, "message": "Please enter a code."}
-    if code not in st.session_state.premium_codes:
-        return {"ok": False, "message": "Invalid code. Purchase a license at Gumroad."}
+    cur.execute("SELECT id FROM users WHERE email_hash = ?", (email_hash,))
+    exists = cur.fetchone()
 
-    entry = st.session_state.premium_codes[code]
+    if not exists:
+        cur.execute("""
+            INSERT INTO users (email_hash, email_plain, generations_used, is_premium, premium_source, premium_since)
+            VALUES (?, ?, 0, 0, '', '')
+        """, (email_hash, email))
 
-    if entry["used"]:
-        if entry["activated_by"] == user_id:
-            return {"ok": True, "message": "Premium restored!", "code": code}
-        return {"ok": False, "message": "This code has already been used. Codes are non-transferable."}
+    conn.commit()
+    conn.close()
 
-    st.session_state.premium_codes[code] = {"used": True, "activated_by": user_id}
-    return {"ok": True, "message": "Premium unlocked!", "code": code}
+def increment_generation(email: str):
+    email_hash = hash_email(email)
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE users
+        SET generations_used = generations_used + 1
+        WHERE email_hash = ?
+    """, (email_hash,))
+    conn.commit()
+    conn.close()
 
+def set_premium(email: str, source: str):
+    email = normalize_email(email)
+    email_hash = hash_email(email)
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE users
+        SET is_premium = 1,
+            premium_source = ?,
+            premium_since = ?
+        WHERE email_hash = ?
+    """, (source, datetime.utcnow().isoformat(), email_hash))
+    conn.commit()
+    conn.close()
 
-def can_generate() -> bool:
-    return st.session_state.is_premium or st.session_state.free_uses < FREE_LIMIT
+def create_local_premium_code(created_by: str = "admin") -> str:
+    raw = secrets.token_hex(8).upper()
+    code = f"AIS-{raw[:4]}-{raw[4:8]}-{raw[8:12]}-{raw[12:16]}"
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO premium_codes (code, created_at, created_by, redeemed)
+        VALUES (?, ?, ?, 0)
+    """, (code, datetime.utcnow().isoformat(), created_by))
+    conn.commit()
+    conn.close()
+    return code
 
+def redeem_local_premium_code(email: str, code: str):
+    email_hash = hash_email(email)
+    conn = get_conn()
+    cur = conn.cursor()
 
-def build_final_prompt(prompt: str, style: str, aspect: str) -> str:
-    style_text = STYLE_HINTS.get(style, "")
-    aspect_text = f"Aspect ratio {aspect}."
-    return f"{prompt}. {style_text}. {aspect_text}"
+    cur.execute("""
+        SELECT * FROM premium_codes WHERE code = ?
+    """, (code.strip().upper(),))
+    row = cur.fetchone()
 
+    if not row:
+        conn.close()
+        return False, "Invalid code."
 
-def generate_image_hf(prompt: str, style: str, aspect: str, model_label: str) -> dict:
-    final_prompt = build_final_prompt(prompt, style, aspect)
-    model_id = MODEL_OPTIONS[model_label]
+    if row["redeemed"] == 1:
+        conn.close()
+        return False, "This code has already been used."
 
-    if not HF_TOKEN:
-        return {
-            "ok": False,
-            "error": "HF_TOKEN is missing in Streamlit secrets."
-        }
+    cur.execute("""
+        UPDATE premium_codes
+        SET redeemed = 1,
+            redeemed_at = ?,
+            redeemed_by_email_hash = ?
+        WHERE code = ?
+    """, (datetime.utcnow().isoformat(), email_hash, code.strip().upper()))
+
+    conn.commit()
+    conn.close()
+
+    set_premium(email, "local_code")
+    return True, "Premium unlocked successfully."
+
+def verify_gumroad_license(license_key: str):
+    """
+    Verifies a Gumroad license key.
+    Requires GUMROAD_PRODUCT_ID in secrets.
+    """
+    if not GUMROAD_PRODUCT_ID:
+        return False, "Missing GUMROAD_PRODUCT_ID in secrets."
 
     try:
-        client = InferenceClient(
-            provider="hf-inference",
-            api_key=HF_TOKEN,
-        )
-
-        image = client.text_to_image(
-            final_prompt,
-            model=model_id
-        )
-
-        return {
-            "ok": True,
-            "image": image,
-            "prompt_used": final_prompt,
-            "style": style,
-            "aspect": aspect,
-            "timestamp": datetime.datetime.now().strftime("%H:%M · %b %d"),
-            "model": model_label,
+        payload = {
+            "product_id": GUMROAD_PRODUCT_ID,
+            "license_key": license_key.strip(),
+            "increment_uses_count": "false",
         }
 
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+        response = requests.post(
+            "https://api.gumroad.com/v2/licenses/verify",
+            data=payload,
+            timeout=30,
+        )
+        data = response.json()
 
-# ─────────────────────────────────────────────
-# UI
-# ─────────────────────────────────────────────
-user_id = get_user_id()
+        if response.status_code != 200:
+            return False, data.get("message", "License verification failed.")
 
-st.markdown("""
-<div class="hero">
-  <div class="hero-badge">✦ Powered by Hugging Face</div>
-  <h1>AI Image Studio</h1>
-  <p>Transform your ideas into stunning visuals — instantly.</p>
-</div>
-""", unsafe_allow_html=True)
+        if not data.get("success"):
+            return False, data.get("message", "Invalid Gumroad license.")
 
-tier_label = "✦ PREMIUM" if st.session_state.is_premium else "FREE"
-uses_left = "∞" if st.session_state.is_premium else str(max(0, FREE_LIMIT - st.session_state.free_uses))
+        purchase = data.get("purchase", {})
+        if purchase is None:
+            return False, "License verified response was incomplete."
 
-st.markdown(f"""
-<div class="stat-strip">
-  <div class="stat-item">
-    <div class="stat-num">{uses_left}</div>
-    <div class="stat-label">Generations left</div>
-  </div>
-  <div class="stat-item">
-    <div class="stat-num">{len(st.session_state.generated_images)}</div>
-    <div class="stat-label">Images created</div>
-  </div>
-  <div class="stat-item">
-    <div class="stat-num">{tier_label}</div>
-    <div class="stat-label">Current plan</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+        return True, "Gumroad license verified."
+    except requests.RequestException:
+        return False, "Network error while verifying Gumroad license."
+    except Exception:
+        return False, "Unexpected error while verifying Gumroad license."
 
-col_left, col_right = st.columns([1.1, 0.9], gap="large")
+def can_generate(email: str):
+    user = get_user(email)
+    if not user:
+        return False, "User not found."
 
-with col_left:
-    st.markdown('<div class="card"><div class="card-title">🎨 Image Generator</div>', unsafe_allow_html=True)
+    if int(user["is_premium"]) == 1:
+        return True, "Premium user."
 
-    prompt = st.text_area(
-        "Describe your image",
-        placeholder="e.g. A neon-lit Tokyo alley at midnight, rain-soaked cobblestones reflecting pink signage, cinematic...",
-        height=110,
-        label_visibility="collapsed",
+    if int(user["generations_used"]) < FREE_LIMIT:
+        return True, "Free generation available."
+
+    return False, "Free limit reached. Upgrade to premium."
+
+def generate_image_hf(prompt: str, negative_prompt: str, width: int, height: int):
+    if not HF_TOKEN:
+        raise RuntimeError(
+            "HF_TOKEN is missing. Add your Hugging Face token in Streamlit secrets."
+        )
+
+    client = InferenceClient(api_key=HF_TOKEN)
+
+    image = client.text_to_image(
+        prompt=prompt,
+        negative_prompt=negative_prompt if negative_prompt else None,
+        model=HF_MODEL,
+        width=width,
+        height=height,
     )
 
-    c1, c2 = st.columns(2)
-    with c1:
-        style = st.selectbox("Style", list(STYLE_HINTS.keys()))
-    with c2:
-        aspect = st.selectbox("Aspect Ratio", [
-            "1:1 Square", "16:9 Landscape", "9:16 Portrait", "4:3 Classic", "3:2 Photo"
-        ])
+    if isinstance(image, Image.Image):
+        return image
 
-    if st.session_state.is_premium:
-        model_label = st.selectbox("Model", list(MODEL_OPTIONS.keys()))
-    else:
-        model_label = "Premium XL"
-        st.caption("Free mode uses Premium XL model.")
+    # fallback safety
+    if isinstance(image, bytes):
+        return Image.open(io.BytesIO(image))
 
-    if not st.session_state.is_premium:
-        pct = int((st.session_state.free_uses / FREE_LIMIT) * 100)
-        st.markdown(f"""
-        <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--muted);margin-top:0.8rem;">
-          <span>Free usage</span><span>{st.session_state.free_uses}/{FREE_LIMIT}</span>
+    raise RuntimeError("Image generation did not return a valid image.")
+
+# =========================================================
+# SESSION STATE
+# =========================================================
+if "email" not in st.session_state:
+    st.session_state.email = ""
+
+if "premium" not in st.session_state:
+    st.session_state.premium = False
+
+if "last_image" not in st.session_state:
+    st.session_state.last_image = None
+
+# =========================================================
+# HERO
+# =========================================================
+st.markdown(
+    f"""
+    <div class="hero-box">
+        <div class="big-title">{APP_TITLE}</div>
+        <div class="subtext">
+            Beautiful AI image generation with free trial, premium unlock, Gumroad checkout, and one-time premium codes.
         </div>
-        <div class="limit-bar-bg">
-          <div class="limit-bar-fill" style="width:{pct}%"></div>
-        </div>
-        """, unsafe_allow_html=True)
+        <span class="pill">Free limit = {FREE_LIMIT}</span>
+        <span class="pill">Premium unlock</span>
+        <span class="pill">Code-based access</span>
+        <span class="pill">Gumroad ready</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    generate_btn = st.button("✦ Generate Image", use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+# =========================================================
+# SIDEBAR
+# =========================================================
+with st.sidebar:
+    st.header("Account")
+    email = st.text_input("Your email", value=st.session_state.email, placeholder="you@example.com")
+    email = normalize_email(email)
+    st.session_state.email = email
 
-    if generate_btn:
-        if not prompt.strip():
-            st.warning("Please enter a prompt first.")
-        elif not can_generate():
-            st.error("🔒 Free limit reached. Unlock Premium below to continue.")
-            st.session_state.show_unlock = True
+    if email and is_valid_email(email):
+        ensure_user(email)
+        user = get_user(email)
+        st.session_state.premium = bool(user["is_premium"])
+
+        st.success("Account ready")
+        st.write(f"Generations used: **{user['generations_used']}**")
+        st.write(f"Premium: **{'Yes' if int(user['is_premium']) == 1 else 'No'}**")
+    elif email:
+        st.warning("Enter a valid email address.")
+
+    st.divider()
+    st.header("Premium")
+    st.markdown(f"[Buy Premium on Gumroad]({GUMROAD_URL})")
+
+    license_key = st.text_input("Gumroad license key", type="password", placeholder="Paste Gumroad license key")
+    if st.button("Verify Gumroad License", use_container_width=True):
+        if not email or not is_valid_email(email):
+            st.error("Enter a valid email first.")
+        elif not license_key.strip():
+            st.error("Paste your Gumroad license key.")
         else:
-            with st.spinner("Crafting your image…"):
-                result = generate_image_hf(prompt, style, aspect, model_label)
-
-            if result.get("ok"):
-                if not st.session_state.is_premium:
-                    st.session_state.free_uses += 1
-                st.session_state.generated_images.insert(0, result)
-                st.success("Image generated successfully!")
+            ok, msg = verify_gumroad_license(license_key)
+            if ok:
+                set_premium(email, "gumroad_license")
+                st.session_state.premium = True
+                st.success(msg)
                 st.rerun()
             else:
-                st.error(f"Generation failed: {result.get('error', 'unknown error')}")
+                st.error(msg)
 
-    if st.session_state.generated_images:
-        latest = st.session_state.generated_images[0]
-        st.markdown('<div class="card"><div class="card-title">🖼 Latest Output</div>', unsafe_allow_html=True)
+    redeem_code = st.text_input("Unlock premium with code", placeholder="AIS-XXXX-XXXX-XXXX")
+    if st.button("Redeem Code", use_container_width=True):
+        if not email or not is_valid_email(email):
+            st.error("Enter a valid email first.")
+        elif not redeem_code.strip():
+            st.error("Enter your premium code.")
+        else:
+            ok, msg = redeem_local_premium_code(email, redeem_code)
+            if ok:
+                st.session_state.premium = True
+                st.success(msg)
+                st.rerun()
+            else:
+                st.error(msg)
 
-        st.image(latest["image"], use_container_width=True)
+    st.divider()
+    st.caption("Codes are one-time use and tied to the email that redeems them.")
 
-        buffer = io.BytesIO()
-        latest["image"].save(buffer, format="PNG")
+# =========================================================
+# MAIN LAYOUT
+# =========================================================
+left, right = st.columns([1.15, 0.85], gap="large")
+
+with left:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Image Generator")
+
+    prompt = st.text_area(
+        "Prompt",
+        placeholder="Example: a luxury futuristic fashion portrait, cinematic lighting, ultra detailed, glossy editorial style",
+        height=140,
+    )
+
+    negative_prompt = st.text_input(
+        "Negative prompt",
+        placeholder="blurry, low quality, deformed, text, watermark"
+    )
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        width = st.selectbox("Width", [512, 768, 1024], index=1)
+    with c2:
+        height = st.selectbox("Height", [512, 768, 1024], index=1)
+    with c3:
+        style = st.selectbox(
+            "Style",
+            ["Cinematic", "Realistic", "Anime", "Fantasy", "Luxury", "Minimal"],
+            index=0,
+        )
+
+    enhance = st.checkbox("Enhance prompt automatically", value=True)
+
+    final_prompt = prompt.strip()
+    if enhance and final_prompt:
+        style_map = {
+            "Cinematic": "cinematic lighting, dramatic composition, high detail",
+            "Realistic": "photorealistic, natural textures, sharp focus",
+            "Anime": "anime illustration, expressive, vivid colors",
+            "Fantasy": "fantasy art, magical atmosphere, detailed environment",
+            "Luxury": "luxury aesthetic, glossy finish, elegant composition",
+            "Minimal": "minimal clean design, refined composition, soft lighting",
+        }
+        final_prompt = f"{final_prompt}, {style_map.get(style, '')}"
+
+    generate_clicked = st.button("Generate Image", type="primary", use_container_width=True)
+
+    if generate_clicked:
+        if not email or not is_valid_email(email):
+            st.error("Please enter a valid email in the sidebar first.")
+        elif not final_prompt:
+            st.error("Please enter a prompt.")
+        else:
+            allowed, reason = can_generate(email)
+            if not allowed:
+                st.error(reason)
+                st.info("Buy premium on Gumroad or redeem a premium code.")
+            else:
+                try:
+                    with st.spinner("Generating your image..."):
+                        img = generate_image_hf(
+                            prompt=final_prompt,
+                            negative_prompt=negative_prompt,
+                            width=width,
+                            height=height,
+                        )
+
+                    st.session_state.last_image = img
+
+                    user = get_user(email)
+                    if int(user["is_premium"]) == 0:
+                        increment_generation(email)
+
+                    st.success("Image generated successfully.")
+                except Exception as e:
+                    st.error(f"Generation failed: {str(e)}")
+
+    if st.session_state.last_image is not None:
+        st.image(st.session_state.last_image, caption="Generated Image", use_container_width=True)
+
+        buf = io.BytesIO()
+        st.session_state.last_image.save(buf, format="PNG")
         st.download_button(
             label="Download PNG",
-            data=buffer.getvalue(),
-            file_name="ai-image-studio.png",
+            data=buf.getvalue(),
+            file_name="ai_image_studio_output.png",
             mime="image/png",
             use_container_width=True,
         )
 
-        st.markdown(f"""
-        <div style="margin-top:0.8rem;font-size:0.82rem;color:var(--muted);line-height:1.7;">
-          <strong style="color:var(--gold);">Prompt Used:</strong><br>
-          <span style="color:var(--text);">{latest.get('prompt_used','')[:300]}</span><br><br>
-          <strong style="color:var(--gold);">Style:</strong> {latest.get('style','')} &nbsp;·&nbsp;
-          <strong style="color:var(--gold);">Ratio:</strong> {latest.get('aspect','')} &nbsp;·&nbsp;
-          <strong style="color:var(--gold);">Model:</strong> {latest.get('model','')} &nbsp;·&nbsp;
-          {latest.get('timestamp','')}
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with right:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("How Premium Works")
+    st.markdown(
+        f"""
+        - **Free users:** {FREE_LIMIT} image only  
+        - **Premium users:** unlimited generations  
+        - **Buy link:** [Open Gumroad checkout]({GUMROAD_URL})  
+        - **Unlock methods:** Gumroad license key or one-time premium code  
+        """
+    )
+    st.markdown(
+        """
+        <div class="warning-box">
+        Premium codes are stored locally in the app database and become invalid after one redemption.
+        This helps reduce code sharing.
         </div>
-        </div>
-        """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    if len(st.session_state.generated_images) > 1:
-        with st.expander(f"📂 History ({len(st.session_state.generated_images)} images)"):
-            for i, img in enumerate(st.session_state.generated_images[1:], 1):
-                n = len(st.session_state.generated_images) - i
-                st.markdown(f"""
-                <div style="border-bottom:1px solid var(--border);padding:0.6rem 0;font-size:0.82rem;color:var(--muted);">
-                  <strong style="color:var(--text);">#{n}</strong> &nbsp;
-                  {img.get('style','')} · {img.get('aspect','')} · {img.get('model','')} · {img.get('timestamp','')}
-                </div>
-                """, unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Admin: Generate Premium Codes")
 
-with col_right:
-    if st.session_state.is_premium:
-        st.markdown(f"""
-        <div class="card" style="border-color:var(--gold);background:linear-gradient(135deg,#1a1508,#13131c);">
-          <div class="card-title">Account Status</div>
-          <div class="premium-badge">✦ PREMIUM ACTIVE</div>
-          <p style="margin-top:0.9rem;font-size:0.88rem;color:var(--muted);">
-            Unlimited generations · All styles unlocked<br>
-            Code: <code style="color:var(--gold);">{st.session_state.activated_code}</code>
-          </p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div class="card">
-          <div class="card-title">Account Status</div>
-          <div class="free-badge">FREE — {st.session_state.free_uses}/{FREE_LIMIT} used</div>
-          <p style="margin-top:0.9rem;font-size:0.88rem;color:var(--muted);">
-            Upgrade to Premium for unlimited<br>image generation and all styles.
-          </p>
-        </div>
-        """, unsafe_allow_html=True)
+    admin_pw = st.text_input("Admin password", type="password", placeholder="Enter admin password")
+    count = st.number_input("Number of codes", min_value=1, max_value=20, value=3, step=1)
 
-    if not st.session_state.is_premium:
-        st.markdown('<div class="card"><div class="card-title">🔓 Unlock Premium</div>', unsafe_allow_html=True)
+    if st.button("Generate Codes", use_container_width=True):
+        if not ADMIN_PASSWORD:
+            st.error("ADMIN_PASSWORD is missing in secrets.")
+        elif admin_pw != ADMIN_PASSWORD:
+            st.error("Wrong admin password.")
+        else:
+            created_codes = []
+            for _ in range(int(count)):
+                created_codes.append(create_local_premium_code(created_by="admin"))
+            st.success("Codes generated successfully.")
+            st.code("\n".join(created_codes), language="text")
 
-        st.markdown(f"""
-        <a href="{GUMROAD_URL}" target="_blank" class="gumroad-btn">
-          ✦ Buy Premium on Gumroad →
-        </a>
-        <p style="text-align:center;font-size:0.78rem;color:var(--muted);margin:0.4rem 0 1.2rem;">
-          You'll receive a unique activation code by email.
-        </p>
-        """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-        code_input = st.text_input(
-            "Activation code",
-            placeholder="AIS-XXXX-XXXX-XXXXXX",
-            label_visibility="collapsed",
-        )
-        activate_btn = st.button("Activate Code", use_container_width=True)
-
-        if activate_btn:
-            res = verify_and_activate(code_input, user_id)
-            if res["ok"]:
-                st.session_state.is_premium = True
-                st.session_state.activated_code = res["code"]
-                st.session_state.show_unlock = False
-                st.success(f"🎉 {res['message']}")
-                st.rerun()
-            else:
-                st.error(res["message"])
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="card">
-      <div class="card-title">✦ Premium Features</div>
-      <div style="display:flex;flex-direction:column;gap:0.65rem;font-size:0.88rem;">
-        <div>✅ &nbsp;<strong>Unlimited</strong> image generations</div>
-        <div>✅ &nbsp;All <strong>10 art styles</strong></div>
-        <div>✅ &nbsp;All <strong>aspect ratios</strong></div>
-        <div>✅ &nbsp;<strong>Multiple model</strong> options</div>
-        <div>✅ &nbsp;Full <strong>generation history</strong></div>
-        <div>✅ &nbsp;<strong>Priority</strong> processing</div>
-        <div>✅ &nbsp;<strong>No ads</strong> — ever</div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    with st.expander("⚙️ Admin — Generate Premium Codes"):
-        st.caption("Generate codes to send to Gumroad buyers. Each code is single-use and non-transferable.")
-        num = st.number_input("Number of codes", min_value=1, max_value=50, value=1, step=1)
-        if st.button("Generate Codes"):
-            new_codes = []
-            for _ in range(int(num)):
-                c = register_new_code()
-                new_codes.append(c)
-            st.success(f"✅ Generated {len(new_codes)} code(s):")
-            for c in new_codes:
-                st.code(c)
-
-        total = len(st.session_state.premium_codes)
-        used = sum(1 for v in st.session_state.premium_codes.values() if v["used"])
-        st.caption(f"Pool: {total} total · {used} used · {total - used} available")
-
-st.markdown(f"""
-<div style="text-align:center;padding:2.5rem 0 1rem;color:var(--muted);font-size:0.78rem;
-            border-top:1px solid var(--border);margin-top:2rem;">
-  AI Image Studio &nbsp;·&nbsp; Powered by Hugging Face &nbsp;·&nbsp;
-  <a href="{GUMROAD_URL}" target="_blank" style="color:var(--gold);text-decoration:none;">
-    Get Premium →
-  </a>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Deployment Notes")
+    st.markdown(
+        """
+        1. Add your secrets before deploying.  
+        2. Enable Gumroad license keys for your product.  
+        3. Add your Gumroad product ID to secrets.  
+        4. Add your Hugging Face token to secrets for image generation.  
+        """
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
