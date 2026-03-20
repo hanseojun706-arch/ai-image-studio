@@ -1024,10 +1024,9 @@ def video_studio_page():
                 return
 
             if not ENABLE_REAL_VIDEO_GENERATION:
-                increment_video_usage(st.session_state.user_id)
-                st.warning("Video generation is currently disabled in this app because the provider requires paid credits. You can still upload and preview videos for free.")
-                st.info("This action was counted toward your daily video limit.")
-                return
+    st.warning("Video generation is currently disabled in this app because the provider requires paid credits. You can still upload and preview videos for free.")
+    st.info("No daily video limit was used because video generation is turned off.")
+    return
 
         render_card_close()
 
