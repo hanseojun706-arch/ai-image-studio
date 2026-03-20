@@ -1,594 +1,624 @@
-import os
+import base64
 import io
-import re
-import sqlite3
-import hashlib
-import secrets
+import json
+import os
+import textwrap
 from datetime import datetime
+from typing import Optional, Tuple
 
 import requests
 import streamlit as st
 from PIL import Image
-from huggingface_hub import InferenceClient
 
-# =========================================================
-# PAGE CONFIG
-# =========================================================
+# ============================================================
+# CONFIG
+# ============================================================
 st.set_page_config(
-    page_title="AI Image Studio",
+    page_title="Nova AI Studio",
     page_icon="✨",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# =========================================================
-# SETTINGS
-# =========================================================
-APP_TITLE = "AI Image Studio"
-GUMROAD_URL = "https://aiimagestudio.gumroad.com/l/yrpblj"
+# ------------------------------------------------------------
+# APP SETTINGS
+# ------------------------------------------------------------
+APP_NAME = "Nova AI Studio"
+TAGLINE = "Clean AI Image & Media Studio"
+CONTACT_EMAIL = "yourmail@example.com"   # <<< replace this
+ABOUT_TEXT = """
+Nova AI Studio helps users create visuals in a simple and professional way.
+Generate AI images from prompts, upload an existing image for restyling,
+preview uploaded videos, and explore media features in one clean website.
+"""
 
-# Put these in Streamlit secrets or environment variables
-HF_TOKEN = st.secrets.get("HF_TOKEN", os.getenv("HF_TOKEN", ""))
-HF_MODEL = st.secrets.get(
-    "HF_MODEL",
-    os.getenv("HF_MODEL", "black-forest-labs/FLUX.1-schnell")
-)
+INTRO_TEXT = """
+Welcome to Nova AI Studio — a modern AI-powered creative space for image creation,
+image restyling, media uploads, and elegant presentation. This app is designed
+to be easy for anyone to understand and use.
+"""
 
-GUMROAD_PRODUCT_ID = st.secrets.get(
-    "GUMROAD_PRODUCT_ID",
-    os.getenv("GUMROAD_PRODUCT_ID", "")
-)
+# Pollinations currently documents that generation requests require an API key.
+# Put your key in Streamlit Secrets:
+# [secrets]
+# POLLINATIONS_API_KEY = "YOUR_KEY"
+POLLINATIONS_API_KEY = st.secrets.get("POLLINATIONS_API_KEY", "")
 
-ADMIN_PASSWORD = st.secrets.get(
-    "ADMIN_PASSWORD",
-    os.getenv("ADMIN_PASSWORD", "")
-)
+# Pollinations base URL
+POLLINATIONS_BASE = "https://gen.pollinations.ai"
 
-FREE_LIMIT = 1
-DB_PATH = "ai_image_studio.db"
+# Optional app behavior flags
+ENABLE_VIDEO_GENERATION = True
+ENABLE_IMAGE_EDIT = True
 
-# =========================================================
+# ============================================================
 # STYLES
-# =========================================================
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background: linear-gradient(135deg, #0b1020 0%, #111827 40%, #1f2937 100%);
-        color: #ffffff;
-    }
+# ============================================================
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-    .hero-box {
-        padding: 28px;
-        border-radius: 24px;
-        background: rgba(255,255,255,0.08);
-        border: 1px solid rgba(255,255,255,0.12);
-        backdrop-filter: blur(12px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-        margin-bottom: 20px;
-    }
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
 
-    .card {
-        padding: 20px;
-        border-radius: 22px;
-        background: rgba(255,255,255,0.07);
-        border: 1px solid rgba(255,255,255,0.10);
-        margin-bottom: 14px;
-    }
+.stApp {
+    background:
+        radial-gradient(circle at top left, rgba(126, 87, 255, 0.16), transparent 25%),
+        radial-gradient(circle at top right, rgba(0, 194, 255, 0.12), transparent 25%),
+        radial-gradient(circle at bottom left, rgba(255, 0, 140, 0.10), transparent 18%),
+        linear-gradient(135deg, #0b1020 0%, #12172a 50%, #0c1326 100%);
+    color: #f5f7ff;
+}
 
-    .big-title {
-        font-size: 3rem;
-        font-weight: 800;
-        line-height: 1.05;
-        margin-bottom: 8px;
-        color: #ffffff;
-    }
+.block-container {
+    padding-top: 1.2rem;
+    padding-bottom: 2rem;
+    max-width: 1280px;
+}
 
-    .subtext {
-        font-size: 1rem;
-        color: #d1d5db;
-        margin-bottom: 10px;
-    }
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, rgba(15,22,45,0.95), rgba(9,14,29,0.98));
+    border-right: 1px solid rgba(255,255,255,0.08);
+}
 
-    .pill {
-        display: inline-block;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: linear-gradient(90deg, #7c3aed, #ec4899);
-        color: white;
-        font-size: 0.9rem;
-        font-weight: 700;
-        margin-right: 8px;
-        margin-top: 8px;
-    }
+.hero-card, .glass-card, .feature-card, .footer-card {
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 24px;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.25);
+}
 
-    .small-note {
-        color: #cbd5e1;
-        font-size: 0.92rem;
-    }
+.hero-card {
+    padding: 30px;
+    margin-bottom: 18px;
+}
 
-    .success-box {
-        padding: 14px;
-        border-radius: 14px;
-        background: rgba(16, 185, 129, 0.15);
-        border: 1px solid rgba(16, 185, 129, 0.35);
-        margin-top: 10px;
-    }
+.glass-card {
+    padding: 18px;
+    margin-bottom: 16px;
+}
 
-    .warning-box {
-        padding: 14px;
-        border-radius: 14px;
-        background: rgba(245, 158, 11, 0.15);
-        border: 1px solid rgba(245, 158, 11, 0.35);
-        margin-top: 10px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+.feature-card {
+    padding: 20px;
+    min-height: 170px;
+}
 
-# =========================================================
-# DATABASE
-# =========================================================
-def get_conn():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+.footer-card {
+    padding: 18px 22px;
+    margin-top: 18px;
+}
 
-def init_db():
-    conn = get_conn()
-    cur = conn.cursor()
+.brand-chip {
+    display: inline-block;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    font-size: 13px;
+    font-weight: 600;
+    color: #dce4ff;
+    margin-bottom: 14px;
+}
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email_hash TEXT UNIQUE,
-            email_plain TEXT,
-            generations_used INTEGER DEFAULT 0,
-            is_premium INTEGER DEFAULT 0,
-            premium_source TEXT,
-            premium_since TEXT
-        )
-    """)
+.hero-title {
+    font-size: 3rem;
+    line-height: 1.1;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    margin-bottom: 10px;
+    color: #ffffff;
+}
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS premium_codes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code TEXT UNIQUE,
-            created_at TEXT,
-            created_by TEXT,
-            redeemed INTEGER DEFAULT 0,
-            redeemed_at TEXT,
-            redeemed_by_email_hash TEXT
-        )
-    """)
+.hero-subtitle {
+    font-size: 1.08rem;
+    line-height: 1.8;
+    color: #d7defa;
+    max-width: 850px;
+}
 
-    conn.commit()
-    conn.close()
+.section-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #ffffff;
+    margin-bottom: 0.25rem;
+}
 
-init_db()
+.section-subtitle {
+    font-size: 0.98rem;
+    color: #cfd8ff;
+    margin-bottom: 1rem;
+}
 
-# =========================================================
+.kpi {
+    background: rgba(255,255,255,0.05);
+    border-radius: 18px;
+    padding: 16px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.kpi h3 {
+    margin: 0;
+    font-size: 1.7rem;
+    color: #ffffff;
+    font-weight: 800;
+}
+
+.kpi p {
+    margin: 0.3rem 0 0;
+    color: #c7d2ff;
+    font-size: 0.92rem;
+}
+
+.stButton > button {
+    width: 100%;
+    border-radius: 14px;
+    border: none;
+    padding: 0.82rem 1rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #7b61ff 0%, #12b5ff 100%);
+    color: white;
+    box-shadow: 0 8px 25px rgba(95, 94, 255, 0.30);
+}
+
+.stDownloadButton > button {
+    width: 100%;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 0.82rem 1rem;
+    font-weight: 700;
+    background: rgba(255,255,255,0.08);
+    color: white;
+}
+
+div[data-testid="stFileUploader"] {
+    background: rgba(255,255,255,0.04);
+    border-radius: 16px;
+    padding: 8px;
+    border: 1px dashed rgba(255,255,255,0.18);
+}
+
+input, textarea, [data-baseweb="select"] {
+    border-radius: 12px !important;
+}
+
+hr {
+    border-color: rgba(255,255,255,0.08);
+}
+
+.small-note {
+    color: #c8d1fb;
+    font-size: 0.88rem;
+    line-height: 1.7;
+}
+
+.success-chip {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(45, 206, 137, 0.12);
+    color: #b7ffd8;
+    border: 1px solid rgba(45, 206, 137, 0.25);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.warning-chip {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255, 196, 0, 0.10);
+    color: #ffe8a3;
+    border: 1px solid rgba(255, 196, 0, 0.18);
+    font-size: 12px;
+    font-weight: 700;
+}
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+# ============================================================
 # HELPERS
-# =========================================================
-def normalize_email(email: str) -> str:
-    return (email or "").strip().lower()
+# ============================================================
+def render_card_open(class_name="glass-card"):
+    st.markdown(f'<div class="{class_name}">', unsafe_allow_html=True)
 
-def is_valid_email(email: str) -> bool:
-    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or ""))
+def render_card_close():
+    st.markdown('</div>', unsafe_allow_html=True)
 
-def hash_email(email: str) -> str:
-    return hashlib.sha256(normalize_email(email).encode()).hexdigest()
+def prompt_is_valid(prompt: str) -> bool:
+    return bool(prompt and len(prompt.strip()) >= 6)
 
-def get_user(email: str):
-    email = normalize_email(email)
-    email_hash = hash_email(email)
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE email_hash = ?", (email_hash,))
-    row = cur.fetchone()
-    conn.close()
-    return row
+def build_enhanced_prompt(prompt: str, style: str, quality: str) -> str:
+    style_addon = {
+        "Realistic": "highly detailed realistic photography, natural lighting, cinematic depth",
+        "Anime": "beautiful anime illustration, expressive details, vibrant visual storytelling",
+        "Fantasy": "epic fantasy concept art, magical atmosphere, dramatic lighting",
+        "Minimal": "clean minimalist composition, elegant shapes, soft balanced layout",
+        "3D": "high quality 3D render, depth, polished materials, studio lighting",
+        "Portrait": "professional portrait composition, balanced face details, refined skin tones",
+        "Product": "premium product photography, studio shot, commercial lighting",
+        "Cinematic": "cinematic composition, mood lighting, ultra-detailed atmosphere",
+    }.get(style, "high quality composition")
 
-def ensure_user(email: str):
-    email = normalize_email(email)
-    email_hash = hash_email(email)
+    quality_addon = {
+        "Standard": "sharp details, clean composition",
+        "High": "high detail, refined textures, polished output",
+        "Ultra": "ultra detailed, premium quality, crisp focus, visually striking",
+    }.get(quality, "sharp details")
 
-    conn = get_conn()
-    cur = conn.cursor()
+    return f"{prompt.strip()}, {style_addon}, {quality_addon}"
 
-    cur.execute("SELECT id FROM users WHERE email_hash = ?", (email_hash,))
-    exists = cur.fetchone()
+def img_to_bytes(img: Image.Image, format_: str = "PNG") -> bytes:
+    buffer = io.BytesIO()
+    img.save(buffer, format=format_)
+    buffer.seek(0)
+    return buffer.getvalue()
 
-    if not exists:
-        cur.execute("""
-            INSERT INTO users (email_hash, email_plain, generations_used, is_premium, premium_source, premium_since)
-            VALUES (?, ?, 0, 0, '', '')
-        """, (email_hash, email))
+def safe_filename(name: str) -> str:
+    return "".join(c for c in name if c.isalnum() or c in ("-", "_")).strip() or "download"
 
-    conn.commit()
-    conn.close()
+def download_link_bytes(data: bytes, filename: str, mime: str) -> None:
+    st.download_button(
+        label=f"Download {filename}",
+        data=data,
+        file_name=filename,
+        mime=mime,
+        use_container_width=True,
+    )
 
-def increment_generation(email: str):
-    email_hash = hash_email(email)
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        UPDATE users
-        SET generations_used = generations_used + 1
-        WHERE email_hash = ?
-    """, (email_hash,))
-    conn.commit()
-    conn.close()
+def show_intro():
+    render_card_open("hero-card")
+    st.markdown('<div class="brand-chip">✨ Clean • Professional • Easy to Use</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hero-title">{APP_NAME}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="hero-subtitle">{INTRO_TEXT}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("<br>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown('<div class="kpi"><h3>AI Images</h3><p>Prompt-based generation</p></div>', unsafe_allow_html=True)
+    with c2:
+        st.markdown('<div class="kpi"><h3>Uploads</h3><p>Image & video support</p></div>', unsafe_allow_html=True)
+    with c3:
+        st.markdown('<div class="kpi"><h3>Professional UI</h3><p>Clean sections and layout</p></div>', unsafe_allow_html=True)
+    render_card_close()
 
-def set_premium(email: str, source: str):
-    email = normalize_email(email)
-    email_hash = hash_email(email)
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        UPDATE users
-        SET is_premium = 1,
-            premium_source = ?,
-            premium_since = ?
-        WHERE email_hash = ?
-    """, (source, datetime.utcnow().isoformat(), email_hash))
-    conn.commit()
-    conn.close()
+def sidebar():
+    st.sidebar.markdown(f"## {APP_NAME}")
+    st.sidebar.caption(TAGLINE)
+    st.sidebar.markdown("---")
+    page = st.sidebar.radio(
+        "Navigate",
+        [
+            "Home",
+            "Image Generator",
+            "Image Restyle",
+            "Video Studio",
+            "Gallery",
+            "About Us",
+            "Contact",
+        ],
+    )
 
-def create_local_premium_code(created_by: str = "admin") -> str:
-    raw = secrets.token_hex(8).upper()
-    code = f"AIS-{raw[:4]}-{raw[4:8]}-{raw[8:12]}-{raw[12:16]}"
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO premium_codes (code, created_at, created_by, redeemed)
-        VALUES (?, ?, ?, 0)
-    """, (code, datetime.utcnow().isoformat(), created_by))
-    conn.commit()
-    conn.close()
-    return code
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Quick Information")
+    st.sidebar.info(
+        "This app supports AI image generation, image upload/restyle, "
+        "video upload/preview, and a clean presentation layout."
+    )
 
-def redeem_local_premium_code(email: str, code: str):
-    email_hash = hash_email(email)
-    conn = get_conn()
-    cur = conn.cursor()
+    if POLLINATIONS_API_KEY:
+        st.sidebar.markdown(
+            '<div class="success-chip">API Key Connected</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.sidebar.markdown(
+            '<div class="warning-chip">API Key Missing</div>',
+            unsafe_allow_html=True
+        )
+        st.sidebar.caption("Add POLLINATIONS_API_KEY in Streamlit Secrets.")
 
-    cur.execute("""
-        SELECT * FROM premium_codes WHERE code = ?
-    """, (code.strip().upper(),))
-    row = cur.fetchone()
+    st.sidebar.markdown("---")
+    st.sidebar.caption("Replace the contact email and branding text in the code before deployment.")
 
-    if not row:
-        conn.close()
-        return False, "Invalid code."
+    return page
 
-    if row["redeemed"] == 1:
-        conn.close()
-        return False, "This code has already been used."
+# ============================================================
+# API FUNCTIONS
+# ============================================================
+def pollinations_headers() -> dict:
+    headers = {"Content-Type": "application/json"}
+    if POLLINATIONS_API_KEY:
+        headers["Authorization"] = f"Bearer {POLLINATIONS_API_KEY}"
+    return headers
 
-    cur.execute("""
-        UPDATE premium_codes
-        SET redeemed = 1,
-            redeemed_at = ?,
-            redeemed_by_email_hash = ?
-        WHERE code = ?
-    """, (datetime.utcnow().isoformat(), email_hash, code.strip().upper()))
-
-    conn.commit()
-    conn.close()
-
-    set_premium(email, "local_code")
-    return True, "Premium unlocked successfully."
-
-def verify_gumroad_license(license_key: str):
+def generate_image_pollinations(
+    prompt: str,
+    model: str = "flux",
+    width: int = 1024,
+    height: int = 1024,
+    negative_prompt: Optional[str] = None,
+    seed: int = -1,
+    enhance: bool = True,
+    safe: bool = True,
+) -> Tuple[Optional[bytes], Optional[str]]:
     """
-    Verifies a Gumroad license key.
-    Requires GUMROAD_PRODUCT_ID in secrets.
+    Uses OpenAI-compatible image generation endpoint.
+    Returns (image_bytes, error_message)
     """
-    if not GUMROAD_PRODUCT_ID:
-        return False, "Missing GUMROAD_PRODUCT_ID in secrets."
+    if not POLLINATIONS_API_KEY:
+        return None, "Missing POLLINATIONS_API_KEY in Streamlit Secrets."
+
+    url = f"{POLLINATIONS_BASE}/v1/images/generations"
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "size": f"{width}x{height}",
+        "response_format": "b64_json",
+        "seed": seed,
+        "enhance": enhance,
+        "safe": safe,
+    }
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt
 
     try:
-        payload = {
-            "product_id": GUMROAD_PRODUCT_ID,
-            "license_key": license_key.strip(),
-            "increment_uses_count": "false",
-        }
+        response = requests.post(url, headers=pollinations_headers(), json=payload, timeout=120)
+        if response.status_code != 200:
+            return None, f"API error {response.status_code}: {response.text}"
 
-        response = requests.post(
-            "https://api.gumroad.com/v2/licenses/verify",
-            data=payload,
-            timeout=30,
-        )
         data = response.json()
+        items = data.get("data", [])
+        if not items:
+            return None, "No image returned by the API."
+
+        b64_data = items[0].get("b64_json")
+        if not b64_data:
+            return None, "Image data missing in API response."
+
+        image_bytes = base64.b64decode(b64_data)
+        return image_bytes, None
+    except requests.Timeout:
+        return None, "Request timed out. Please try again."
+    except Exception as e:
+        return None, f"Generation failed: {str(e)}"
+
+def edit_image_pollinations(
+    image_bytes: bytes,
+    prompt: str,
+    model: str = "flux",
+) -> Tuple[Optional[bytes], Optional[str]]:
+    """
+    Uses image edit endpoint with multipart upload.
+    """
+    if not POLLINATIONS_API_KEY:
+        return None, "Missing POLLINATIONS_API_KEY in Streamlit Secrets."
+
+    url = f"{POLLINATIONS_BASE}/v1/images/edits"
+    headers = {}
+    if POLLINATIONS_API_KEY:
+        headers["Authorization"] = f"Bearer {POLLINATIONS_API_KEY}"
+
+    files = {
+        "image": ("upload.png", image_bytes, "image/png")
+    }
+    data = {
+        "prompt": prompt,
+        "model": model,
+    }
+
+    try:
+        response = requests.post(url, headers=headers, data=data, files=files, timeout=180)
+        if response.status_code != 200:
+            return None, f"API error {response.status_code}: {response.text}"
+
+        # Some providers return JSON, some may return binary.
+        content_type = response.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            res_json = response.json()
+            items = res_json.get("data", [])
+            if items and items[0].get("b64_json"):
+                return base64.b64decode(items[0]["b64_json"]), None
+            if items and items[0].get("url"):
+                image_url = items[0]["url"]
+                img_res = requests.get(image_url, timeout=120)
+                if img_res.status_code == 200:
+                    return img_res.content, None
+                return None, "Failed to download edited image from returned URL."
+            return None, "Unexpected JSON response from image edit API."
+
+        return response.content, None
+    except requests.Timeout:
+        return None, "Edit request timed out. Please try again."
+    except Exception as e:
+        return None, f"Edit failed: {str(e)}"
+
+def generate_video_pollinations(
+    prompt: str,
+    model: str = "wan",
+    duration: int = 4,
+    aspect_ratio: str = "16:9",
+) -> Tuple[Optional[bytes], Optional[str]]:
+    """
+    Uses GET /image/{prompt} that Pollinations documents as returning image/jpeg or video/mp4
+    depending on the model. Many video models are paid/preview.
+    """
+    if not POLLINATIONS_API_KEY:
+        return None, "Missing POLLINATIONS_API_KEY in Streamlit Secrets."
+
+    try:
+        from urllib.parse import quote
+        encoded = quote(prompt.strip())
+        url = (
+            f"{POLLINATIONS_BASE}/image/{encoded}"
+            f"?model={model}&duration={duration}&aspectRatio={aspect_ratio}&safe=true&enhance=true"
+        )
+        headers = {"Authorization": f"Bearer {POLLINATIONS_API_KEY}"}
+        response = requests.get(url, headers=headers, timeout=300)
 
         if response.status_code != 200:
-            return False, data.get("message", "License verification failed.")
+            return None, f"API error {response.status_code}: {response.text}"
 
-        if not data.get("success"):
-            return False, data.get("message", "Invalid Gumroad license.")
+        content_type = response.headers.get("Content-Type", "")
+        if "video" not in content_type and not response.content:
+            return None, "The API did not return a video file."
 
-        purchase = data.get("purchase", {})
-        if purchase is None:
-            return False, "License verified response was incomplete."
+        return response.content, None
+    except requests.Timeout:
+        return None, "Video generation timed out. Try a shorter prompt or smaller duration."
+    except Exception as e:
+        return None, f"Video generation failed: {str(e)}"
 
-        return True, "Gumroad license verified."
-    except requests.RequestException:
-        return False, "Network error while verifying Gumroad license."
-    except Exception:
-        return False, "Unexpected error while verifying Gumroad license."
-
-def can_generate(email: str):
-    user = get_user(email)
-    if not user:
-        return False, "User not found."
-
-    if int(user["is_premium"]) == 1:
-        return True, "Premium user."
-
-    if int(user["generations_used"]) < FREE_LIMIT:
-        return True, "Free generation available."
-
-    return False, "Free limit reached. Upgrade to premium."
-
-def generate_image_hf(prompt: str, negative_prompt: str, width: int, height: int):
-    if not HF_TOKEN:
-        raise RuntimeError(
-            "HF_TOKEN is missing. Add your Hugging Face token in Streamlit secrets."
-        )
-
-    client = InferenceClient(api_key=HF_TOKEN)
-
-    image = client.text_to_image(
-        prompt=prompt,
-        negative_prompt=negative_prompt if negative_prompt else None,
-        model=HF_MODEL,
-        width=width,
-        height=height,
-    )
-
-    if isinstance(image, Image.Image):
-        return image
-
-    # fallback safety
-    if isinstance(image, bytes):
-        return Image.open(io.BytesIO(image))
-
-    raise RuntimeError("Image generation did not return a valid image.")
-
-# =========================================================
+# ============================================================
 # SESSION STATE
-# =========================================================
-if "email" not in st.session_state:
-    st.session_state.email = ""
+# ============================================================
+if "gallery" not in st.session_state:
+    st.session_state.gallery = []
 
-if "premium" not in st.session_state:
-    st.session_state.premium = False
+def save_to_gallery(kind: str, title: str, data: bytes, mime: str):
+    st.session_state.gallery.insert(0, {
+        "kind": kind,
+        "title": title,
+        "data": data,
+        "mime": mime,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
 
-if "last_image" not in st.session_state:
-    st.session_state.last_image = None
-
-# =========================================================
-# HERO
-# =========================================================
-st.markdown(
-    f"""
-    <div class="hero-box">
-        <div class="big-title">{APP_TITLE}</div>
-        <div class="subtext">
-            Beautiful AI image generation with free trial, premium unlock, Gumroad checkout, and one-time premium codes.
-        </div>
-        <span class="pill">Free limit = {FREE_LIMIT}</span>
-        <span class="pill">Premium unlock</span>
-        <span class="pill">Code-based access</span>
-        <span class="pill">Gumroad ready</span>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# =========================================================
-# SIDEBAR
-# =========================================================
-with st.sidebar:
-    st.header("Account")
-    email = st.text_input("Your email", value=st.session_state.email, placeholder="you@example.com")
-    email = normalize_email(email)
-    st.session_state.email = email
-
-    if email and is_valid_email(email):
-        ensure_user(email)
-        user = get_user(email)
-        st.session_state.premium = bool(user["is_premium"])
-
-        st.success("Account ready")
-        st.write(f"Generations used: **{user['generations_used']}**")
-        st.write(f"Premium: **{'Yes' if int(user['is_premium']) == 1 else 'No'}**")
-    elif email:
-        st.warning("Enter a valid email address.")
-
-    st.divider()
-    st.header("Premium")
-    st.markdown(f"[Buy Premium on Gumroad]({GUMROAD_URL})")
-
-    license_key = st.text_input("Gumroad license key", type="password", placeholder="Paste Gumroad license key")
-    if st.button("Verify Gumroad License", use_container_width=True):
-        if not email or not is_valid_email(email):
-            st.error("Enter a valid email first.")
-        elif not license_key.strip():
-            st.error("Paste your Gumroad license key.")
-        else:
-            ok, msg = verify_gumroad_license(license_key)
-            if ok:
-                set_premium(email, "gumroad_license")
-                st.session_state.premium = True
-                st.success(msg)
-                st.rerun()
-            else:
-                st.error(msg)
-
-    redeem_code = st.text_input("Unlock premium with code", placeholder="AIS-XXXX-XXXX-XXXX")
-    if st.button("Redeem Code", use_container_width=True):
-        if not email or not is_valid_email(email):
-            st.error("Enter a valid email first.")
-        elif not redeem_code.strip():
-            st.error("Enter your premium code.")
-        else:
-            ok, msg = redeem_local_premium_code(email, redeem_code)
-            if ok:
-                st.session_state.premium = True
-                st.success(msg)
-                st.rerun()
-            else:
-                st.error(msg)
-
-    st.divider()
-    st.caption("Codes are one-time use and tied to the email that redeems them.")
-
-# =========================================================
-# MAIN LAYOUT
-# =========================================================
-left, right = st.columns([1.15, 0.85], gap="large")
-
-with left:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Image Generator")
-
-    prompt = st.text_area(
-        "Prompt",
-        placeholder="Example: a luxury futuristic fashion portrait, cinematic lighting, ultra detailed, glossy editorial style",
-        height=140,
-    )
-
-    negative_prompt = st.text_input(
-        "Negative prompt",
-        placeholder="blurry, low quality, deformed, text, watermark"
-    )
+# ============================================================
+# PAGE SECTIONS
+# ============================================================
+def home_page():
+    show_intro()
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        width = st.selectbox("Width", [512, 768, 1024], index=1)
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Image Generator</div>
+                <div class="section-subtitle">Turn text prompts into visual artwork</div>
+                <div class="small-note">
+                    Enter your prompt, choose style and quality, and create high-quality images
+                    in a simple guided workflow.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     with c2:
-        height = st.selectbox("Height", [512, 768, 1024], index=1)
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Upload & Restyle</div>
+                <div class="section-subtitle">Transform uploaded images with AI</div>
+                <div class="small-note">
+                    Upload an image and describe the new visual style you want.
+                    Great for portraits, posters, fantasy looks, and creative redesigns.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     with c3:
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Video Studio</div>
+                <div class="section-subtitle">Upload, preview, and optionally generate</div>
+                <div class="small-note">
+                    Upload and preview your video files directly in the website.
+                    Optional prompt-to-video generation can be enabled when your provider supports it.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    render_card_open()
+    st.markdown('<div class="section-title">How this website works</div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        1. Go to **Image Generator** to create visuals from a prompt.  
+        2. Use **Image Restyle** to upload an image and transform it.  
+        3. Use **Video Studio** to upload and preview videos, and optionally generate videos if your API plan supports it.  
+        4. Open **Gallery** to view and download your generated or uploaded content.  
+        """)
+    render_card_close()
+
+    render_card_open()
+    st.markdown('<div class="section-title">Easy-to-understand information</div>', unsafe_allow_html=True)
+    st.write(
+        "This website is made for simplicity. The layout is clean, the sections are separated clearly, "
+        "and each page explains what the user should do. You can customize the logo, colors, text, "
+        "contact email, and media features before deployment."
+    )
+    render_card_close()
+
+def image_generator_page():
+    render_card_open()
+    st.markdown('<div class="section-title">AI Image Generator</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Generate images from text prompts</div>', unsafe_allow_html=True)
+    render_card_close()
+
+    col_left, col_right = st.columns([1.05, 0.95], gap="large")
+
+    with col_left:
+        render_card_open()
+        prompt = st.text_area(
+            "Describe your image",
+            placeholder="Example: A luxury glass perfume bottle on a marble table, soft studio lighting, premium product photography",
+            height=140,
+        )
+
         style = st.selectbox(
             "Style",
-            ["Cinematic", "Realistic", "Anime", "Fantasy", "Luxury", "Minimal"],
+            ["Realistic", "Anime", "Fantasy", "Minimal", "3D", "Portrait", "Product", "Cinematic"],
             index=0,
         )
 
-    enhance = st.checkbox("Enhance prompt automatically", value=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            quality = st.selectbox("Quality", ["Standard", "High", "Ultra"], index=1)
+            model = st.selectbox("Model", ["flux", "zimage", "gptimage"], index=0)
+        with c2:
+            size = st.selectbox(
+                "Aspect / Size",
+                ["1024x1024", "1024x1536", "1536x1024", "768x1344", "1344x768"],
+                index=0,
+            )
+            safe_mode = st.toggle("Safe mode", value=True)
 
-    final_prompt = prompt.strip()
-    if enhance and final_prompt:
-        style_map = {
-            "Cinematic": "cinematic lighting, dramatic composition, high detail",
-            "Realistic": "photorealistic, natural textures, sharp focus",
-            "Anime": "anime illustration, expressive, vivid colors",
-            "Fantasy": "fantasy art, magical atmosphere, detailed environment",
-            "Luxury": "luxury aesthetic, glossy finish, elegant composition",
-            "Minimal": "minimal clean design, refined composition, soft lighting",
-        }
-        final_prompt = f"{final_prompt}, {style_map.get(style, '')}"
-
-    generate_clicked = st.button("Generate Image", type="primary", use_container_width=True)
-
-    if generate_clicked:
-        if not email or not is_valid_email(email):
-            st.error("Please enter a valid email in the sidebar first.")
-        elif not final_prompt:
-            st.error("Please enter a prompt.")
-        else:
-            allowed, reason = can_generate(email)
-            if not allowed:
-                st.error(reason)
-                st.info("Buy premium on Gumroad or redeem a premium code.")
-            else:
-                try:
-                    with st.spinner("Generating your image..."):
-                        img = generate_image_hf(
-                            prompt=final_prompt,
-                            negative_prompt=negative_prompt,
-                            width=width,
-                            height=height,
-                        )
-
-                    st.session_state.last_image = img
-
-                    user = get_user(email)
-                    if int(user["is_premium"]) == 0:
-                        increment_generation(email)
-
-                    st.success("Image generated successfully.")
-                except Exception as e:
-                    st.error(f"Generation failed: {str(e)}")
-
-    if st.session_state.last_image is not None:
-        st.image(st.session_state.last_image, caption="Generated Image", use_container_width=True)
-
-        buf = io.BytesIO()
-        st.session_state.last_image.save(buf, format="PNG")
-        st.download_button(
-            label="Download PNG",
-            data=buf.getvalue(),
-            file_name="ai_image_studio_output.png",
-            mime="image/png",
-            use_container_width=True,
+        negative_prompt = st.text_input(
+            "Negative prompt",
+            value="blurry, low quality, distorted face, bad anatomy, text, watermark, extra fingers"
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        enhance = st.toggle("Enhance prompt automatically", value=True)
 
-with right:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("How Premium Works")
-    st.markdown(
-        f"""
-        - **Free users:** {FREE_LIMIT} image only  
-        - **Premium users:** unlimited generations  
-        - **Buy link:** [Open Gumroad checkout]({GUMROAD_URL})  
-        - **Unlock methods:** Gumroad license key or one-time premium code  
-        """
-    )
-    st.markdown(
-        """
-        <div class="warning-box">
-        Premium codes are stored locally in the app database and become invalid after one redemption.
-        This helps reduce code sharing.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Admin: Generate Premium Codes")
-
-    admin_pw = st.text_input("Admin password", type="password", placeholder="Enter admin password")
-    count = st.number_input("Number of codes", min_value=1, max_value=20, value=3, step=1)
-
-    if st.button("Generate Codes", use_container_width=True):
-        if not ADMIN_PASSWORD:
-            st.error("ADMIN_PASSWORD is missing in secrets.")
-        elif admin_pw != ADMIN_PASSWORD:
-            st.error("Wrong admin password.")
-        else:
-            created_codes = []
-            for _ in range(int(count)):
-                created_codes.append(create_local_premium_code(created_by="admin"))
-            st.success("Codes generated successfully.")
-            st.code("\n".join(created_codes), language="text")
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Deployment Notes")
-    st.markdown(
-        """
-        1. Add your secrets before deploying.  
-        2. Enable Gumroad license keys for your product.  
-        3. Add your Gumroad product ID to secrets.  
-        4. Add your Hugging Face token to secrets for image generation.  
-        """
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+        seed_mode = st.selectbox("Seed mode", ["Random", "Fixed"],
