@@ -1013,7 +1013,7 @@ def video_studio_page():
 
         gen_video = st.button("Generate Video")
 
-       if gen_video:
+    if gen_video:
         allowed, message = can_generate_video()
     if not allowed:
         st.error(message)
