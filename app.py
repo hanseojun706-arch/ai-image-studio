@@ -981,6 +981,7 @@ def video_studio_page():
             type=["mp4", "mov", "avi", "mkv", "webm"],
             help="Upload and preview your video here.",
         )
+
         if up_video:
             video_bytes = up_video.read()
             st.video(video_bytes)
@@ -989,6 +990,7 @@ def video_studio_page():
             st.success("Video uploaded successfully.")
         else:
             st.info("Upload a video to preview it here.")
+
         render_card_close()
 
     with tab2:
@@ -1001,32 +1003,59 @@ def video_studio_page():
             placeholder="Example: Cinematic nature scene with slow camera movement and glowing sunset light",
             height=120,
         )
+
         vc1, vc2, vc3 = st.columns(3)
         with vc1:
-            st.selectbox("Video model", ["wan", "ltx-2", "seedance"], index=0)
+            v_model = st.selectbox("Video model", ["wan", "ltx-2", "seedance"], index=0)
         with vc2:
             max_seconds = get_current_video_max_seconds()
             default_seconds = 4 if max_seconds >= 4 else max_seconds
-            st.slider("Duration (seconds)", min_value=2, max_value=max_seconds, value=default_seconds)
+            v_duration = st.slider(
+                "Duration (seconds)",
+                min_value=2,
+                max_value=max_seconds,
+                value=default_seconds
+            )
         with vc3:
-            st.selectbox("Aspect ratio", ["16:9", "9:16"], index=0)
+            v_ratio = st.selectbox("Aspect ratio", ["16:9", "9:16"], index=0)
 
         gen_video = st.button("Generate Video")
 
-    if gen_video:
-        allowed, message = can_generate_video()
-    if not allowed:
-        st.error(message)
-        return
+        if gen_video:
+            allowed, message = can_generate_video()
 
-    if not prompt_is_valid(v_prompt):
-        st.error("Please enter a more detailed video prompt.")
-        return
+            if not allowed:
+                st.error(message)
+                render_card_close()
+                return
 
-    if not ENABLE_REAL_VIDEO_GENERATION:
-        st.warning("Video generation is currently disabled in this app because the provider requires paid credits. You can still upload and preview videos for free.")
-        st.info("No daily video limit was used because video generation is turned off.")
-        return
+            if not prompt_is_valid(v_prompt):
+                st.error("Please enter a more detailed video prompt.")
+                render_card_close()
+                return
+
+            if not ENABLE_REAL_VIDEO_GENERATION:
+                st.warning("Video generation is currently disabled in this app because the provider requires paid credits. You can still upload and preview videos for free.")
+                st.info("No daily video limit was used because video generation is turned off.")
+                render_card_close()
+                return
+
+            with st.spinner("Generating video..."):
+                video_bytes, error = generate_video_pollinations(
+                    prompt=v_prompt,
+                    model=v_model,
+                    duration=v_duration,
+                    aspect_ratio=v_ratio,
+                )
+
+            if error:
+                st.error(error)
+            else:
+                increment_video_usage(st.session_state.user_id)
+                st.video(video_bytes)
+                save_to_gallery("video", "generated_video.mp4", video_bytes, "video/mp4")
+                download_link_bytes(video_bytes, "generated_video.mp4", "video/mp4")
+                st.success("Video generated successfully.")
 
         render_card_close()
 
