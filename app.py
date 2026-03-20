@@ -66,7 +66,7 @@ ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "admin123")
 POLLINATIONS_BASE = "https://gen.pollinations.ai"
 DB_PATH = Path("anu_ai_studio_usage.db")
 
-# Set this to True only if you later buy credits and want to re-enable real video generation
+# Keep False to avoid paid video API errors
 ENABLE_REAL_VIDEO_GENERATION = False
 
 # ============================================================
@@ -676,4 +676,540 @@ def sidebar():
         ensure_user_record(st.session_state.user_id, st.session_state.user_email)
 
     plan = get_current_plan()
-    image_count, video_count = get_today_u
+    image_count, video_count = get_today_usage(st.session_state.user_id)
+
+    st.sidebar.markdown("### Plan Status")
+    if plan == "premium":
+        st.sidebar.markdown('<div class="status-chip status-premium">Premium Active</div>', unsafe_allow_html=True)
+        st.sidebar.success("Unlimited images and unlimited video access enabled.")
+        st.sidebar.write(f"Max video duration: {PREMIUM_VIDEO_MAX_SECONDS} seconds")
+    else:
+        st.sidebar.markdown('<div class="status-chip status-warn">Free Plan Active</div>', unsafe_allow_html=True)
+        st.sidebar.write(f"Images used today: {image_count}/{FREE_IMAGE_LIMIT_PER_DAY}")
+        st.sidebar.write(f"Videos used today: {video_count}/{FREE_VIDEO_LIMIT_PER_DAY}")
+        st.sidebar.write(f"Free video max duration: {FREE_VIDEO_MAX_SECONDS} seconds")
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### API Status")
+    if POLLINATIONS_API_KEY:
+        st.sidebar.markdown('<div class="status-chip status-ok">API Key Connected</div>', unsafe_allow_html=True)
+    else:
+        st.sidebar.markdown('<div class="status-chip status-warn">API Key Missing</div>', unsafe_allow_html=True)
+        st.sidebar.caption("Add POLLINATIONS_API_KEY in Streamlit Secrets.")
+
+    st.sidebar.markdown("---")
+    st.sidebar.info("Free users get 5 images/day and 2 videos/day. Premium users get unlimited access.")
+
+    return page
+
+# ============================================================
+# PAGES
+# ============================================================
+def show_intro():
+    render_card_open("hero-card")
+    st.markdown('<div class="brand-chip">✨ Free + Premium • AI Images • Media Upload • Clean UI</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hero-title">{APP_NAME}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hero-subtitle">{INTRO_TEXT}</div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown('<div class="kpi"><h3>5 Free Images</h3><p>Daily image limit</p></div>', unsafe_allow_html=True)
+    with c2:
+        st.markdown('<div class="kpi"><h3>2 Video Slots</h3><p>Daily free count</p></div>', unsafe_allow_html=True)
+    with c3:
+        st.markdown('<div class="kpi"><h3>Premium Mode</h3><p>Unlimited access</p></div>', unsafe_allow_html=True)
+    render_card_close()
+
+
+def home_page():
+    show_intro()
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">AI Image Generator</div>
+                <div class="section-subtitle">Create images from text prompts</div>
+                <div class="small-note">
+                    Type a prompt, choose a style, select quality, and generate polished visuals in seconds.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Upload & Restyle</div>
+                <div class="section-subtitle">Transform uploaded images</div>
+                <div class="small-note">
+                    Upload your own image and restyle it using AI with a prompt that explains the look you want.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Video Studio</div>
+                <div class="section-subtitle">Upload and preview videos</div>
+                <div class="small-note">
+                    Upload and preview videos for free. Real prompt-to-video is disabled here to avoid paid-credit errors.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    render_card_open()
+    st.markdown('<div class="section-title">How this website works</div>', unsafe_allow_html=True)
+    st.write(
+        "1. Open Image Generator to create visuals from prompts.\n\n"
+        "2. Use Image Restyle to upload an image and transform it.\n\n"
+        "3. Open Video Studio to upload and preview videos.\n\n"
+        "4. Upgrade to Premium for unlimited image and video usage limits."
+    )
+    render_card_close()
+
+    render_card_open()
+    st.markdown('<div class="section-title">Plans</div>', unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(
+            """
+            <div class="plan-box">
+                <b>Free Plan</b><br><br>
+                • 5 images per day<br>
+                • 2 video actions per day<br>
+                • Video max duration setting: 10 seconds<br>
+                • Upload image and video support
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col2:
+        st.markdown(
+            f"""
+            <div class="plan-box">
+                <b>Premium Plan</b><br><br>
+                • Unlimited images per day<br>
+                • Unlimited videos per day<br>
+                • Video max duration setting: {PREMIUM_VIDEO_MAX_SECONDS} seconds<br>
+                • Premium usage access
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    render_card_close()
+
+
+def image_generator_page():
+    render_card_open()
+    st.markdown('<div class="section-title">AI Image Generator</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Generate images from prompts</div>', unsafe_allow_html=True)
+    render_card_close()
+
+    col_left, col_right = st.columns([1.05, 0.95], gap="large")
+
+    with col_left:
+        render_card_open()
+        prompt = st.text_area(
+            "Describe your image",
+            placeholder="Example: A luxury perfume bottle on a marble table, elegant soft lighting, premium product photography",
+            height=140,
+        )
+        style = st.selectbox(
+            "Style",
+            ["Realistic", "Anime", "Fantasy", "Minimal", "3D", "Portrait", "Product", "Cinematic"],
+            index=0,
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            quality = st.selectbox("Quality", ["Standard", "High", "Ultra"], index=1)
+            model = st.selectbox("Model", ["flux", "gptimage", "zimage"], index=0)
+        with c2:
+            size = st.selectbox("Aspect / Size", ["1024x1024", "1024x1536", "1536x1024", "768x1344", "1344x768"], index=0)
+            safe_mode = st.toggle("Safe mode", value=True)
+
+        negative_prompt = st.text_input(
+            "Negative prompt",
+            value="blurry, low quality, distorted face, bad anatomy, watermark, text, extra fingers"
+        )
+        enhance = st.toggle("Enhance prompt automatically", value=True)
+        seed_mode = st.selectbox("Seed mode", ["Random", "Fixed"], index=0)
+        seed_value = st.number_input("Seed", min_value=-1, max_value=999999, value=-1, step=1)
+
+        generate_clicked = st.button("Generate Image")
+        render_card_close()
+
+    with col_right:
+        render_card_open()
+        st.markdown("### Result Preview")
+        result_box = st.empty()
+        details_box = st.empty()
+        render_card_close()
+
+    if generate_clicked:
+        allowed, message = can_generate_image()
+        if not allowed:
+            st.error(message)
+            return
+
+        if not prompt_is_valid(prompt):
+            st.error("Please enter a more detailed prompt.")
+            return
+
+        width, height = map(int, size.split("x"))
+        final_prompt = build_enhanced_prompt(prompt, style, quality)
+        final_seed = -1 if seed_mode == "Random" else int(seed_value)
+
+        with st.spinner("Generating your image..."):
+            img_bytes, error = generate_image_pollinations(
+                prompt=final_prompt,
+                model=model,
+                width=width,
+                height=height,
+                negative_prompt=negative_prompt,
+                seed=final_seed,
+                enhance=enhance,
+                safe=safe_mode,
+            )
+
+        if error:
+            st.error(error)
+            return
+
+        increment_image_usage(st.session_state.user_id)
+        result_box.image(img_bytes, caption="Generated Image", use_container_width=True)
+        details_box.success("Image generated successfully.")
+        save_to_gallery("image", "generated_image.png", img_bytes, "image/png")
+        download_link_bytes(img_bytes, "generated_image.png", "image/png")
+
+        with st.expander("Final prompt used"):
+            st.code(final_prompt)
+
+
+def image_restyle_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Upload Image & Restyle</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Upload your image and transform it with AI</div>', unsafe_allow_html=True)
+    render_card_close()
+
+    c1, c2 = st.columns([1, 1], gap="large")
+
+    with c1:
+        render_card_open()
+        uploaded = st.file_uploader(
+            "Upload an image",
+            type=["png", "jpg", "jpeg", "webp"],
+            help="Upload a clear image for better restyling results.",
+        )
+        edit_prompt = st.text_area(
+            "Describe the transformation",
+            placeholder="Example: Turn this into a cinematic portrait with luxury color grading and soft glowing lights",
+            height=120,
+        )
+        edit_model = st.selectbox("Edit model", ["flux", "gptimage", "klein"], index=0)
+        edit_clicked = st.button("Restyle Image")
+        render_card_close()
+
+    with c2:
+        render_card_open()
+        st.markdown("### Preview")
+        if uploaded:
+            st.image(uploaded, caption=f"Uploaded: {uploaded.name}", use_container_width=True)
+        else:
+            st.info("Your uploaded image preview will appear here.")
+        render_card_close()
+
+    if edit_clicked:
+        allowed, message = can_generate_image()
+        if not allowed:
+            st.error(message)
+            return
+
+        if not uploaded:
+            st.error("Please upload an image first.")
+            return
+
+        if not prompt_is_valid(edit_prompt):
+            st.error("Please enter a clear transformation prompt.")
+            return
+
+        try:
+            pil_image = Image.open(uploaded).convert("RGBA")
+            image_bytes = img_to_bytes(pil_image, "PNG")
+        except Exception as e:
+            st.error(f"Could not process uploaded image: {str(e)}")
+            return
+
+        with st.spinner("Restyling image..."):
+            out_bytes, error = edit_image_pollinations(
+                image_bytes=image_bytes,
+                prompt=edit_prompt,
+                model=edit_model,
+            )
+
+        if error:
+            st.error(error)
+            return
+
+        increment_image_usage(st.session_state.user_id)
+        st.success("Image restyled successfully.")
+        st.image(out_bytes, caption="Restyled Image", use_container_width=True)
+        save_to_gallery("image", "restyled_image.png", out_bytes, "image/png")
+        download_link_bytes(out_bytes, "restyled_image.png", "image/png")
+
+
+def video_studio_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Video Studio</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Upload, preview, or manage video content</div>', unsafe_allow_html=True)
+    render_card_close()
+
+    tab1, tab2 = st.tabs(["Upload Video", "Generate Video"])
+
+    with tab1:
+        render_card_open()
+        up_video = st.file_uploader(
+            "Upload a video",
+            type=["mp4", "mov", "avi", "mkv", "webm"],
+            help="Upload and preview your video here.",
+        )
+        if up_video:
+            video_bytes = up_video.read()
+            st.video(video_bytes)
+            save_to_gallery("video", up_video.name, video_bytes, "video/mp4")
+            download_link_bytes(video_bytes, up_video.name, "video/mp4")
+            st.success("Video uploaded successfully.")
+        else:
+            st.info("Upload a video to preview it here.")
+        render_card_close()
+
+    with tab2:
+        render_card_open()
+        st.markdown("### Prompt to Video")
+        st.caption("Real prompt-to-video is disabled in this version to avoid paid-credit errors.")
+
+        v_prompt = st.text_area(
+            "Describe the video",
+            placeholder="Example: Cinematic nature scene with slow camera movement and glowing sunset light",
+            height=120,
+        )
+        vc1, vc2, vc3 = st.columns(3)
+        with vc1:
+            st.selectbox("Video model", ["wan", "ltx-2", "seedance"], index=0)
+        with vc2:
+            max_seconds = get_current_video_max_seconds()
+            default_seconds = 4 if max_seconds >= 4 else max_seconds
+            st.slider("Duration (seconds)", min_value=2, max_value=max_seconds, value=default_seconds)
+        with vc3:
+            st.selectbox("Aspect ratio", ["16:9", "9:16"], index=0)
+
+        gen_video = st.button("Generate Video")
+
+        if gen_video:
+            allowed, message = can_generate_video()
+            if not allowed:
+                st.error(message)
+                return
+
+            if not prompt_is_valid(v_prompt):
+                st.error("Please enter a more detailed video prompt.")
+                return
+
+            if not ENABLE_REAL_VIDEO_GENERATION:
+                increment_video_usage(st.session_state.user_id)
+                st.warning("Video generation is currently disabled in this app because the provider requires paid credits. You can still upload and preview videos for free.")
+                st.info("This action was counted toward your daily video limit.")
+                return
+
+        render_card_close()
+
+
+def gallery_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Gallery</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">View generated and uploaded content</div>', unsafe_allow_html=True)
+    render_card_close()
+
+    items = st.session_state.gallery
+    if not items:
+        st.info("No items in gallery yet. Generate or upload something first.")
+        return
+
+    for item in items:
+        render_card_open()
+        st.markdown(f"### {item['title']}")
+        st.caption(f"{item['kind'].title()} • {item['time']}")
+        if item["kind"] == "image":
+            st.image(item["data"], use_container_width=True)
+        else:
+            st.video(item["data"])
+        download_link_bytes(item["data"], item["title"], item["mime"])
+        render_card_close()
+
+
+def about_page():
+    render_card_open()
+    st.markdown('<div class="section-title">About Us</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Professional, simple, and user-friendly creative platform</div>', unsafe_allow_html=True)
+    st.write(ABOUT_TEXT)
+    render_card_close()
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Our Mission</div>
+                <div class="small-note">
+                    To provide a beautiful AI media website where users can generate images, transform uploads, and use creative tools easily.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Why This Website</div>
+                <div class="small-note">
+                    This platform is designed for clarity, simplicity, and a premium-looking experience without confusion.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def contact_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Contact</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Users can reach you easily</div>', unsafe_allow_html=True)
+    st.markdown(f"**Contact Email:** {CONTACT_EMAIL}")
+    st.write("You can customize this section further later.")
+    render_card_close()
+
+    render_card_open()
+    with st.form("contact_form"):
+        name = st.text_input("Your name")
+        email = st.text_input("Your email")
+        message = st.text_area("Your message", height=140)
+        submitted = st.form_submit_button("Send Message")
+        if submitted:
+            if not name or not email or not message:
+                st.error("Please fill in all fields.")
+            else:
+                st.success("Form submitted in demo mode. For real email sending, connect an email service.")
+    render_card_close()
+
+
+def premium_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Premium Access</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Unlock unlimited image and video generation limits</div>', unsafe_allow_html=True)
+    render_card_close()
+
+    current_plan = get_current_plan()
+    if current_plan == "premium":
+        st.success("Premium is already active for this user.")
+        if st.button("Switch back to Free Plan"):
+            set_user_plan(st.session_state.user_id, "free")
+            st.success("Switched to Free Plan.")
+            st.rerun()
+        return
+
+    col1, col2 = st.columns([1, 1], gap="large")
+    with col1:
+        render_card_open()
+        st.markdown("### Free Plan")
+        st.write(f"• {FREE_IMAGE_LIMIT_PER_DAY} images per day")
+        st.write(f"• {FREE_VIDEO_LIMIT_PER_DAY} video actions per day")
+        st.write(f"• Max video duration setting: {FREE_VIDEO_MAX_SECONDS} seconds")
+        render_card_close()
+
+    with col2:
+        render_card_open()
+        st.markdown("### Premium Plan")
+        st.write("• Unlimited images per day")
+        st.write("• Unlimited videos per day")
+        st.write(f"• Max video duration setting: {PREMIUM_VIDEO_MAX_SECONDS} seconds")
+        st.write("• Premium usage access")
+        render_card_close()
+
+    render_card_open()
+    st.markdown("### Enter Premium Access Code")
+    entered_code = st.text_input("Premium code", type="password")
+    activate = st.button("Activate Premium")
+
+    if activate:
+        if not entered_code:
+            st.error("Please enter the premium code.")
+        elif entered_code == PREMIUM_ACCESS_CODE:
+            set_user_plan(st.session_state.user_id, "premium")
+            st.success("Premium activated successfully.")
+            st.rerun()
+        else:
+            st.error("Invalid premium code.")
+    render_card_close()
+
+    render_card_open()
+    st.markdown("### Admin Panel")
+    admin_pw = st.text_input("Admin password", type="password")
+    if st.button("Open Admin"):
+        if admin_pw == ADMIN_PASSWORD:
+            st.session_state.admin_unlocked = True
+            st.success("Admin access unlocked.")
+        else:
+            st.error("Incorrect admin password.")
+
+    if st.session_state.admin_unlocked:
+        st.markdown("#### Current Premium Code")
+        st.code(PREMIUM_ACCESS_CODE)
+        st.caption("Change PREMIUM_ACCESS_CODE in Streamlit Secrets to update it.")
+    render_card_close()
+
+
+def footer():
+    st.markdown(
+        f"""
+        <div class="footer-card">
+            <b>{APP_NAME}</b><br>
+            <span class="small-note">
+                {TAGLINE} • Free + Premium access • AI image generation • Media upload support
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ============================================================
+# MAIN
+# ============================================================
+page = sidebar()
+
+if page == "Home":
+    home_page()
+elif page == "Image Generator":
+    image_generator_page()
+elif page == "Image Restyle":
+    image_restyle_page()
+elif page == "Video Studio":
+    video_studio_page()
+elif page == "Gallery":
+    gallery_page()
+elif page == "About Us":
+    about_page()
+elif page == "Contact":
+    contact_page()
+elif page == "Premium":
+    premium_page()
+
+footer()
