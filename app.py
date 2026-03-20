@@ -1013,20 +1013,20 @@ def video_studio_page():
 
         gen_video = st.button("Generate Video")
 
-        if gen_video:
-            allowed, message = can_generate_video()
-            if not allowed:
-                st.error(message)
-                return
+       if gen_video:
+    allowed, message = can_generate_video()
+    if not allowed:
+        st.error(message)
+        return
 
-            if not prompt_is_valid(v_prompt):
-                st.error("Please enter a more detailed video prompt.")
-                return
+    if not prompt_is_valid(v_prompt):
+        st.error("Please enter a more detailed video prompt.")
+        return
 
-            if not ENABLE_REAL_VIDEO_GENERATION:
-    st.warning("Video generation is currently disabled in this app because the provider requires paid credits. You can still upload and preview videos for free.")
-    st.info("No daily video limit was used because video generation is turned off.")
-    return
+    if not ENABLE_REAL_VIDEO_GENERATION:
+        st.warning("Video generation is currently disabled in this app because the provider requires paid credits. You can still upload and preview videos for free.")
+        st.info("No daily video limit was used because video generation is turned off.")
+        return
 
         render_card_close()
 
