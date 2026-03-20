@@ -621,4 +621,321 @@ def image_generator_page():
 
         enhance = st.toggle("Enhance prompt automatically", value=True)
 
-        seed_mode = st.selectbox("Seed mode", ["Random", "Fixed"],
+        seed_mode = st.selectbox("Seed mode", ["Random", "Fixed"], index=0)
+        seed_value = st.number_input("Seed", min_value=-1, max_value=999999, value=-1, step=1)
+
+        generate_clicked = st.button("Generate Image")
+
+        render_card_close()
+
+    with col_right:
+        render_card_open()
+        st.markdown("### Result Preview")
+        result_box = st.empty()
+        details_box = st.empty()
+        render_card_close()
+
+    if generate_clicked:
+        if not prompt_is_valid(prompt):
+            st.error("Please enter a more detailed prompt.")
+            return
+
+        width, height = map(int, size.split("x"))
+        final_prompt = build_enhanced_prompt(prompt, style, quality)
+        final_seed = -1 if seed_mode == "Random" else int(seed_value)
+
+        with st.spinner("Generating your image..."):
+            img_bytes, error = generate_image_pollinations(
+                prompt=final_prompt,
+                model=model,
+                width=width,
+                height=height,
+                negative_prompt=negative_prompt,
+                seed=final_seed,
+                enhance=enhance,
+                safe=safe_mode,
+            )
+
+        if error:
+            st.error(error)
+            st.info(
+                "Tip: add your API key in Streamlit Secrets and try again. "
+                "Also try a more specific prompt with style details."
+            )
+            return
+
+        result_box.image(img_bytes, caption="Generated Image", use_container_width=True)
+        details_box.success("Image generated successfully.")
+        save_to_gallery("image", "generated_image.png", img_bytes, "image/png")
+        download_link_bytes(img_bytes, "generated_image.png", "image/png")
+
+        with st.expander("Show final prompt used"):
+            st.code(final_prompt)
+
+def image_restyle_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Upload Image & Restyle</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-subtitle">Upload your image and describe how you want it transformed</div>',
+        unsafe_allow_html=True
+    )
+    render_card_close()
+
+    c1, c2 = st.columns([1, 1], gap="large")
+
+    with c1:
+        render_card_open()
+        uploaded = st.file_uploader(
+            "Upload an image",
+            type=["png", "jpg", "jpeg", "webp"],
+            help="Upload a clear image for best results.",
+        )
+
+        edit_prompt = st.text_area(
+            "Describe the new style or transformation",
+            placeholder="Example: Make it look like a high-end cinematic portrait with elegant lighting and premium color grading",
+            height=120
+        )
+
+        edit_model = st.selectbox("Edit model", ["flux", "gptimage", "klein"], index=0)
+        edit_clicked = st.button("Restyle Image")
+        render_card_close()
+
+    with c2:
+        render_card_open()
+        st.markdown("### Preview")
+        if uploaded:
+            st.image(uploaded, caption=f"Uploaded: {uploaded.name}", use_container_width=True)
+        else:
+            st.info("Your uploaded image preview will appear here.")
+        render_card_close()
+
+    if edit_clicked:
+        if not uploaded:
+            st.error("Please upload an image first.")
+            return
+        if not prompt_is_valid(edit_prompt):
+            st.error("Please enter a clear transformation prompt.")
+            return
+
+        try:
+            pil_image = Image.open(uploaded).convert("RGBA")
+            image_bytes = img_to_bytes(pil_image, "PNG")
+        except Exception as e:
+            st.error(f"Could not process uploaded image: {str(e)}")
+            return
+
+        with st.spinner("Restyling image..."):
+            out_bytes, error = edit_image_pollinations(
+                image_bytes=image_bytes,
+                prompt=edit_prompt,
+                model=edit_model,
+            )
+
+        if error:
+            st.error(error)
+            st.info("Make sure your API key is valid and your provider plan supports image editing.")
+            return
+
+        st.success("Image restyled successfully.")
+        st.image(out_bytes, caption="Restyled Image", use_container_width=True)
+        save_to_gallery("image", "restyled_image.png", out_bytes, "image/png")
+        download_link_bytes(out_bytes, "restyled_image.png", "image/png")
+
+def video_studio_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Video Studio</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-subtitle">Upload, preview, and optionally generate videos</div>',
+        unsafe_allow_html=True
+    )
+    render_card_close()
+
+    tab1, tab2 = st.tabs(["Upload Video", "Generate Video"])
+
+    with tab1:
+        render_card_open()
+        up_video = st.file_uploader(
+            "Upload a video",
+            type=["mp4", "mov", "avi", "mkv", "webm"],
+            help="You can preview uploaded videos directly in the app."
+        )
+
+        if up_video:
+            st.video(up_video)
+            video_bytes = up_video.read()
+            save_to_gallery("video", up_video.name, video_bytes, "video/mp4")
+            download_link_bytes(video_bytes, up_video.name, "video/mp4")
+            st.success("Video uploaded and ready.")
+        else:
+            st.info("Upload a video to preview it here.")
+        render_card_close()
+
+    with tab2:
+        render_card_open()
+        st.markdown("### Prompt to Video")
+        st.caption(
+            "This section is optional. Many current video models require paid/preview API access."
+        )
+        v_prompt = st.text_area(
+            "Describe the video",
+            placeholder="Example: A cinematic slow camera move through a glowing futuristic city at night, neon reflections, dramatic atmosphere",
+            height=120
+        )
+        vc1, vc2, vc3 = st.columns(3)
+        with vc1:
+            v_model = st.selectbox("Video model", ["wan", "ltx-2", "seedance"], index=0)
+        with vc2:
+            v_duration = st.slider("Duration (seconds)", min_value=2, max_value=10, value=4)
+        with vc3:
+            v_ratio = st.selectbox("Aspect ratio", ["16:9", "9:16"], index=0)
+
+        gen_video = st.button("Generate Video")
+
+        if gen_video:
+            if not prompt_is_valid(v_prompt):
+                st.error("Please enter a more detailed video prompt.")
+            else:
+                with st.spinner("Generating video..."):
+                    video_bytes, error = generate_video_pollinations(
+                        prompt=v_prompt,
+                        model=v_model,
+                        duration=v_duration,
+                        aspect_ratio=v_ratio,
+                    )
+                if error:
+                    st.error(error)
+                    st.info(
+                        "Your provider may require a paid plan or may not have video access enabled."
+                    )
+                else:
+                    st.video(video_bytes)
+                    save_to_gallery("video", "generated_video.mp4", video_bytes, "video/mp4")
+                    download_link_bytes(video_bytes, "generated_video.mp4", "video/mp4")
+                    st.success("Video generated successfully.")
+        render_card_close()
+
+def gallery_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Gallery</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">View your generated and uploaded content</div>', unsafe_allow_html=True)
+    render_card_close()
+
+    items = st.session_state.gallery
+    if not items:
+        st.info("No items in gallery yet. Generate or upload something first.")
+        return
+
+    for idx, item in enumerate(items):
+        render_card_open()
+        st.markdown(f"### {item['title']}")
+        st.caption(f"{item['kind'].title()} • {item['time']}")
+        if item["kind"] == "image":
+            st.image(item["data"], use_container_width=True)
+        elif item["kind"] == "video":
+            st.video(item["data"])
+        download_link_bytes(item["data"], item["title"], item["mime"])
+        render_card_close()
+
+def about_page():
+    render_card_open()
+    st.markdown('<div class="section-title">About Us</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Professional, simple, and user-friendly creative platform</div>', unsafe_allow_html=True)
+    st.write(ABOUT_TEXT)
+    st.write(
+        "This website is designed to help users understand AI creation tools without confusion. "
+        "The design is clean, the features are separated clearly, and the workflow is easy for beginners."
+    )
+    render_card_close()
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Our Mission</div>
+                <div class="small-note">
+                    To provide a beautiful and understandable AI media website where anyone can
+                    generate images, upload media, and explore creative tools with confidence.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            """
+            <div class="feature-card">
+                <div class="section-title">Why This Website</div>
+                <div class="small-note">
+                    Many websites feel confusing or too technical. This one focuses on clarity,
+                    elegant layout, smooth sections, and an overall professional experience.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+def contact_page():
+    render_card_open()
+    st.markdown('<div class="section-title">Contact</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Let users reach you easily</div>', unsafe_allow_html=True)
+    st.write("You can customize the contact section before deploying.")
+    st.markdown(f"**Contact email:** {CONTACT_EMAIL}")
+    st.write(
+        "You may also add social links, business inquiry details, or a support form later."
+    )
+    render_card_close()
+
+    render_card_open()
+    with st.form("contact_form"):
+        name = st.text_input("Your name")
+        email = st.text_input("Your email")
+        message = st.text_area("Your message", height=140)
+        submitted = st.form_submit_button("Send Message")
+        if submitted:
+            if not name or not email or not message:
+                st.error("Please fill in all fields.")
+            else:
+                st.success(
+                    "Form submitted in the demo UI. For real email sending, connect an email backend service."
+                )
+    render_card_close()
+
+# ============================================================
+# FOOTER
+# ============================================================
+def footer():
+    st.markdown(
+        f"""
+        <div class="footer-card">
+            <b>{APP_NAME}</b><br>
+            <span class="small-note">
+                {TAGLINE} • Easy to understand • Professional layout • Image and media focused
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ============================================================
+# MAIN
+# ============================================================
+page = sidebar()
+
+if page == "Home":
+    home_page()
+elif page == "Image Generator":
+    image_generator_page()
+elif page == "Image Restyle":
+    image_restyle_page()
+elif page == "Video Studio":
+    video_studio_page()
+elif page == "Gallery":
+    gallery_page()
+elif page == "About Us":
+    about_page()
+elif page == "Contact":
+    contact_page()
+
+footer()
